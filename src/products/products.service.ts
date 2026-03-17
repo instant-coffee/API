@@ -95,6 +95,7 @@ export class ProductsService {
         'price_extra', 'active', 'lst_price',
       ],
     );
+    console.log("🚀 ~ ProductsService ~ getProduct ~ variants:", variants, site)
 
     // ── 5. Get pricelist prices for all variants ──────────────────────────────
     const variantIds       = variants.map((v) => v.id);
@@ -182,6 +183,7 @@ export class ProductsService {
       const addOnPrices     = addOnVariantIds.length
         ? await this.odoo.getPricelistPrices(site.pricelistId, addOnVariantIds)
         : {};
+      console.log("🚀 ~ ProductsService ~ getProduct ~ addOnPrices:", addOnPrices)
 
       shapedAddOns = addOnTemplates.map((t) => {
         const defaultVariant = variantsByTemplate.get(t.id)?.[0];

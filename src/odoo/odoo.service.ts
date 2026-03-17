@@ -190,11 +190,25 @@ export class OdooService implements OnModuleInit {
     variantIds: number[],
     quantity = 1,
   ): Promise<Record<number, number>> {
-    return this.callKw<Record<number, number>>(
-      'product.pricelist',
-      'get_products_price',
-      [pricelistId, variantIds, Array(variantIds.length).fill(quantity)],
-    );
+    console.log('Getting pricelist prices for variants', variantIds, 'with pricelist', pricelistId);
+    if (!variantIds?.length) return {};
+
+    try {
+      return await this.callKw<Record<number, number>>(
+        'product.pricelist',
+        'get_products_price',
+        [pricelistId, variantIds, Array(variantIds.length).fill(quantity)],
+      );
+    } catch (err: any) {
+      // Some Odoo instances or custom deployments may not expose the
+      // `product.pricelist.get_products_price` helper. In that case we
+      // gracefully fall back to an empty map so callers use the variant's
+      // `lst_price` as a default.
+      this.logger.warn(
+        `Pricelist price RPC failed (falling back to list prices): ${err?.message ?? err}`,
+      );
+      return {};
+    }
   }
 
   // ─── Session helpers ───────────────────────────────────────────────────────
