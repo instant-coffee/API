@@ -4,6 +4,7 @@ import {
   OdooProductTemplate,
   OdooProductVariant,
   OdooAttributeLine,
+  OdooAttribute,
   OdooTemplateAttributeValue,
 } from '../odoo/types/odoo.types';
 import { SiteContext } from '../config/site-context';
@@ -54,11 +55,24 @@ export class ProductsService {
       throw new NotFoundException(`Product template ${templateId} not found`);
     }
 
-    // ── 2. Fetch attribute lines + their PTAVs ────────────────────────────────
+    // ── 2. Fetch attribute lines ──────────────────────────────────────────────
+    // Note: create_variant lives on product.attribute, not on the line itself
     const attrLines = await this.odoo.searchRead<OdooAttributeLine>(
       'product.template.attribute.line',
       [['id', 'in', template.attribute_line_ids]],
-      ['id', 'attribute_id', 'value_ids', 'product_template_value_ids', 'create_variant'],
+      ['id', 'attribute_id', 'value_ids', 'product_template_value_ids'],
+    );
+
+    // ── 2b. Fetch product.attribute to get create_variant for each line ───────
+    const attributeIds = [...new Set(attrLines.map((l) => l.attribute_id[0]))];
+    const attributes   = await this.odoo.searchRead<OdooAttribute>(
+      'product.attribute',
+      [['id', 'in', attributeIds]],
+      ['id', 'name', 'create_variant'],
+    );
+    // Map: attribute ID → create_variant value
+    const createVariantByAttrId = new Map(
+      attributes.map((a) => [a.id, a.create_variant]),
     );
 
     // ── 3. Collect all PTAV IDs across all attribute lines ────────────────────
@@ -117,7 +131,7 @@ export class ProductsService {
 
     // ── 7. Shape no_variant wheel options ─────────────────────────────────────
     const noVariantLines = attrLines.filter(
-      (l) => l.create_variant === 'no_variant',
+      (l) => createVariantByAttrId.get(l.attribute_id[0]) === 'no_variant',
     );
 
     const shapedOptions: WheelOptionDto[] = noVariantLines.map((line) => {

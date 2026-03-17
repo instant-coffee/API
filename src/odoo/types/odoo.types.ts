@@ -59,13 +59,21 @@ export interface OdooProductVariant {
   combination_indices: string;
 }
 
+// ─── Raw product.attribute ────────────────────────────────────────────────────
+// create_variant lives on the attribute itself, not on the attribute line
+export interface OdooAttribute {
+  id: number;
+  name: string;
+  create_variant: 'always' | 'dynamic' | 'no_variant';
+}
+
 // ─── Raw product.template.attribute.line ─────────────────────────────────────
 export interface OdooAttributeLine {
   id: number;
   attribute_id: [number, string];
   value_ids: number[];
   product_template_value_ids: number[];
-  create_variant: 'always' | 'dynamic' | 'no_variant';
+  // create_variant is on product.attribute — fetched separately and joined by attribute_id
 }
 
 // ─── Raw product.attribute.value ─────────────────────────────────────────────
