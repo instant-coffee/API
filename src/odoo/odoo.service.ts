@@ -46,7 +46,7 @@ export class OdooService implements OnModuleInit {
     // Eagerly authenticate so the first real request is fast.
     try {
       await this.authenticate();
-      this.logger.log(`Connected to Odoo at ${this.baseUrl} (uid: ${this.session?.uid})`);
+      this.logger.log(`Connected to Odoo at ${this.baseUrl} (uid: ${this.session?.uid}, cookie: ${this.session?.sessionId ? '✓' : '✗'})`);
     } catch (err) {
       this.logger.error('Failed to authenticate with Odoo on startup', err);
       // Non-fatal at startup — will retry on first request.
@@ -58,20 +58,70 @@ export class OdooService implements OnModuleInit {
   /**
    * Authenticate against Odoo and cache the session.
    * Called automatically by onModuleInit and when a session expires.
+   *
+   * Important: we make the HTTP call directly here (not via _rpc) so we can
+   * capture the Set-Cookie response header. Odoo's real session token lives
+   * there — the session_id in the JSON body is the same value, but using the
+   * cookie header is more reliable across Odoo SH / SaaS configurations.
    */
   async authenticate(): Promise<OdooSession> {
-    const response = await this._rpc<OdooAuthResult>(
-      '/web/session/authenticate',
-      { db: this.db, login: this.login, password: this.password },
-    );
+    const url = `${this.baseUrl}/web/session/authenticate`;
 
-    if (!response.uid) {
+    let httpResponse: any;
+    try {
+      httpResponse = await firstValueFrom(
+        this.http.post(
+          url,
+          {
+            jsonrpc: '2.0',
+            method:  'call',
+            id:      this._requestId++,
+            params:  { db: this.db, login: this.login, password: this.password },
+          },
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+    } catch (err: any) {
+      throw new InternalServerErrorException(`Odoo auth HTTP error: ${err.message}`);
+    }
+
+    const body: OdooJsonRpcResponse<OdooAuthResult> = httpResponse.data;
+
+    if (body.error) {
+      const msg = body.error.data?.message ?? body.error.message;
+      throw new InternalServerErrorException(`Odoo auth failed: ${msg}`);
+    }
+
+    const result = body.result;
+    if (!result?.uid) {
       throw new InternalServerErrorException('Odoo authentication failed — check ODOO_ADMIN_LOGIN/PASSWORD');
     }
 
+    // ── Extract session cookie from Set-Cookie header ─────────────────────
+    // Odoo sets:  session_id=<value>; Path=/; HttpOnly; SameSite=Lax
+    // We store the raw "session_id=<value>" string and replay it as a
+    // Cookie header on every subsequent request.
+    let sessionCookie = '';
+    const setCookieHeader = httpResponse.headers['set-cookie'] as string[] | string | undefined;
+
+    if (setCookieHeader) {
+      const cookies = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
+      const found   = cookies.find((c) => c.startsWith('session_id='));
+      if (found) {
+        sessionCookie = found.split(';')[0]; // "session_id=xxxx"
+      }
+    }
+
+    // Fall back to the value in the JSON body if the header wasn't present
+    if (!sessionCookie && result.session_id) {
+      sessionCookie = `session_id=${result.session_id}`;
+    }
+
+    this.logger.debug(`Session cookie captured: ${sessionCookie ? '✓' : '✗ (none found)'}`);
+
     this.session = {
-      uid:       response.uid,
-      sessionId: response.session_id,
+      uid:       result.uid,
+      sessionId: sessionCookie,   // full "session_id=xxx" string, ready to use as Cookie header
       expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8 h
     };
 
@@ -166,9 +216,10 @@ export class OdooService implements OnModuleInit {
       'Content-Type': 'application/json',
     };
 
-    // Pass session cookie for authenticated calls
+    // Pass session cookie for authenticated calls.
+    // sessionId already contains the full "session_id=xxx" string.
     if (this.session?.sessionId) {
-      headers['Cookie'] = `session_id=${this.session.sessionId}`;
+      headers['Cookie'] = this.session.sessionId;
     }
 
     let body: OdooJsonRpcResponse<T>;

@@ -127,7 +127,7 @@ export class ProductsService {
 
       const values = line.product_template_value_ids
         .map((id) => ptavById.get(id))
-        .filter(Boolean)
+        .filter((p): p is OdooTemplateAttributeValue => !!p)
         .map((ptav) => ({ id: ptav.id, label: ptav.name }));
 
       return {
@@ -160,7 +160,7 @@ export class ProductsService {
       for (const v of addOnVariants) {
         const tmplId = v.product_tmpl_id[0];
         if (!variantsByTemplate.has(tmplId)) variantsByTemplate.set(tmplId, []);
-        variantsByTemplate.get(tmplId).push(v);
+        variantsByTemplate.get(tmplId)!.push(v);
       }
 
       // Get pricelist prices for add-on variants
