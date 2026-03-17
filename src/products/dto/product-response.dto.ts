@@ -12,10 +12,11 @@ export interface PriceDto {
 export interface VariantDto {
   id:          number;
   sku:         string;
-  position:    string;   // "Complete Wheelset" | "Front Only" | "Rear Only"
-  rimSize:     string;   // "29" | "27.5" | "Mullet"
+  position:    string;              // "Complete Wheelset" | "Front Only" | "Rear Only" | "N/A"
+  rimSize:     string;              // "29" | "27.5" | "Mullet" | "N/A"
+  attributes:  Record<string, string>; // full map of all attribute name → value for this variant
   price:       PriceDto;
-  available:   boolean;  // false = archived (e.g. Mullet FW/RW)
+  available:   boolean;             // false = archived (e.g. Mullet FW/RW)
 }
 
 export interface AttributeValueDto {

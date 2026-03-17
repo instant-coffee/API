@@ -86,6 +86,29 @@ export class ProductsService {
 
     const ptavById = new Map(ptavs.map((p) => [p.id, p]));
 
+    // ── 3b. Build lookup: attribute line ID → attribute name ──────────────────
+    // Used to resolve which PTAV belongs to which attribute on a variant,
+    // without relying on hardcoded value strings.
+    const attrLineIdToName = new Map(
+      attrLines.map((l) => [l.id, l.attribute_id[1]]),
+    );
+
+    // Find the attribute line IDs for position and rim size on THIS template.
+    // If a template doesn't have one of these attributes (e.g. a dedicated
+    // FW-only template with no Wheelset Options), the value will be undefined
+    // and we'll fall back to 'N/A' rather than 'Unknown'.
+    const positionLineId = attrLines.find(
+      (l) => l.attribute_id[1] === POSITION_ATTRIBUTE,
+    )?.id;
+
+    const rimSizeLineId = attrLines.find(
+      (l) => l.attribute_id[1] === RIM_SIZE_ATTRIBUTE,
+    )?.id;
+
+    this.logger.debug(
+      `Attribute lines — position: ${positionLineId ?? 'none'}, rimSize: ${rimSizeLineId ?? 'none'}`,
+    );
+
     // ── 4. Fetch variants ─────────────────────────────────────────────────────
     const variants = await this.odoo.searchRead<OdooProductVariant>(
       'product.product',
@@ -95,7 +118,6 @@ export class ProductsService {
         'price_extra', 'active', 'lst_price',
       ],
     );
-    console.log("🚀 ~ ProductsService ~ getProduct ~ variants:", variants, site)
 
     // ── 5. Get pricelist prices for all variants ──────────────────────────────
     const variantIds       = variants.map((v) => v.id);
@@ -106,27 +128,38 @@ export class ProductsService {
 
     // ── 6. Shape variants ─────────────────────────────────────────────────────
     const shapedVariants: VariantDto[] = variants.map((v) => {
-      const ptavNames = v.product_template_attribute_value_ids
-        .map((id) => ptavById.get(id)?.name ?? '')
-        .filter(Boolean);
+      const variantPtavs = v.product_template_attribute_value_ids
+        .map((id) => ptavById.get(id))
+        .filter((p): p is OdooTemplateAttributeValue => !!p);
 
-      const position = ptavNames.find((n) =>
-        ['Complete Wheelset', 'Front Only', 'Rear Only', 'Rim Only'].includes(n),
-      ) ?? 'Unknown';
+      // Look up position and rimSize by their attribute line ID — not by
+      // matching against a hardcoded list of value names.
+      const positionPtav = positionLineId !== undefined
+        ? variantPtavs.find((p) => p.attribute_line_id === positionLineId)
+        : undefined;
 
-      const rimSize = ptavNames.find((n) =>
-        ['29', '27.5', 'Mullet'].includes(n),
-      ) ?? 'Unknown';
+      const rimSizePtav = rimSizeLineId !== undefined
+        ? variantPtavs.find((p) => p.attribute_line_id === rimSizeLineId)
+        : undefined;
 
-      const rawPrice  = pricelistPrices[v.id] ?? v.lst_price;
+      // Build a flat map of all attribute values on this variant for the
+      // `attributes` field — useful for debugging and future frontend use.
+      const attributes: Record<string, string> = {};
+      for (const ptav of variantPtavs) {
+        const attrName = attrLineIdToName.get(ptav.attribute_line_id);
+        if (attrName) attributes[attrName] = ptav.name;
+      }
+
+      const rawPrice = pricelistPrices[v.id] ?? v.lst_price;
 
       return {
-        id:        v.id,
-        sku:       v.default_code || `tmpl-${templateId}-var-${v.id}`,
-        position,
-        rimSize,
-        price:     this._formatPrice(rawPrice, site.currency),
-        available: v.active,
+        id:         v.id,
+        sku:        v.default_code || `tmpl-${templateId}-var-${v.id}`,
+        position:   positionPtav?.name ?? 'N/A',
+        rimSize:    rimSizePtav?.name  ?? 'N/A',
+        attributes,                               // full attribute map for debugging
+        price:      this._formatPrice(rawPrice, site.currency),
+        available:  v.active,
       };
     });
 
