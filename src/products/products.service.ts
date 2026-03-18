@@ -18,13 +18,14 @@ import {
 
 // ─── Attribute names as they appear in Odoo ──────────────────────────────────
 // Used to identify which attribute lines are no_variant options vs. variants.
-const POSITION_ATTRIBUTE   = 'Wheelset Options';    // creates inventory variants
-const RIM_SIZE_ATTRIBUTE   = 'Rim Size';            // creates inventory variants
-const FREEHUB_ATTRIBUTE    = 'Freehub Type';        // no_variant
-const BRAKE_ATTRIBUTE      = 'Brake Interface';     // no_variant
+const POSITION_ATTRIBUTE   = 'Wheelset Options';       // creates inventory variants
+const RIM_SIZE_ATTRIBUTE   = 'Rim Size';               // creates inventory variants
+const FREEHUB_ATTRIBUTE    = 'Freehub Type Option';    // no_variant — actual Odoo name
+const BRAKE_ATTRIBUTE      = 'Brake Interface Option'; // no_variant — actual Odoo name
 
-// Freehub is only relevant for rear-wheel builds
-const FREEHUB_VISIBLE_FOR  = ['Complete Wheelset', 'Rear Only'];
+// Freehub is only relevant for rear-wheel builds.
+// Values must match exactly what Odoo returns in the Wheelset Options attribute.
+const FREEHUB_VISIBLE_FOR  = ['Rear Wheel', 'Complete Wheelset'];
 
 @Injectable()
 export class ProductsService {
@@ -86,17 +87,26 @@ export class ProductsService {
 
     const ptavById = new Map(ptavs.map((p) => [p.id, p]));
 
-    // ── 3b. Build lookup: attribute line ID → attribute name ──────────────────
-    // Used to resolve which PTAV belongs to which attribute on a variant,
-    // without relying on hardcoded value strings.
-    const attrLineIdToName = new Map(
+    // ── 3b. Build reverse lookup: ptavId → lineId ─────────────────────────────
+    // We derive this from the attribute lines' own product_template_value_ids
+    // lists — NOT from the attribute_line_id field on the PTAV record.
+    //
+    // Why: attribute_line_id is a Many2one and Odoo's search_read returns it
+    // as a [id, displayName] tuple, not a plain integer, so comparing it
+    // directly against a lineId number always fails silently.
+    const ptavToLineId = new Map<number, number>();
+    for (const line of attrLines) {
+      for (const ptavId of line.product_template_value_ids) {
+        ptavToLineId.set(ptavId, line.id);
+      }
+    }
+
+    // ── 3c. Build readable label lookup: lineId → attribute name ─────────────
+    const lineIdToAttrName = new Map(
       attrLines.map((l) => [l.id, l.attribute_id[1]]),
     );
 
-    // Find the attribute line IDs for position and rim size on THIS template.
-    // If a template doesn't have one of these attributes (e.g. a dedicated
-    // FW-only template with no Wheelset Options), the value will be undefined
-    // and we'll fall back to 'N/A' rather than 'Unknown'.
+    // Find the line IDs for position and rim size on THIS template.
     const positionLineId = attrLines.find(
       (l) => l.attribute_id[1] === POSITION_ATTRIBUTE,
     )?.id;
@@ -120,8 +130,11 @@ export class ProductsService {
     );
 
     // ── 5. Get pricelist prices for all variants ──────────────────────────────
-    const variantIds       = variants.map((v) => v.id);
-    const pricelistPrices  = await this.odoo.getPricelistPrices(
+    this.logger.debug(
+      `Variant price_extra values: ${variants.map(v => `${v.default_code}=${v.price_extra}`).join(', ')}`,
+    );
+    const variantIds      = variants.map((v) => v.id);
+    const pricelistPrices = await this.odoo.getPricelistPrices(
       site.pricelistId,
       variantIds,
     );
@@ -132,21 +145,22 @@ export class ProductsService {
         .map((id) => ptavById.get(id))
         .filter((p): p is OdooTemplateAttributeValue => !!p);
 
-      // Look up position and rimSize by their attribute line ID — not by
-      // matching against a hardcoded list of value names.
+      // For each PTAV on this variant, resolve its parent line ID via the
+      // reverse lookup built from attrLines — avoids the Many2one tuple issue.
       const positionPtav = positionLineId !== undefined
-        ? variantPtavs.find((p) => p.attribute_line_id === positionLineId)
+        ? variantPtavs.find((p) => ptavToLineId.get(p.id) === positionLineId)
         : undefined;
 
       const rimSizePtav = rimSizeLineId !== undefined
-        ? variantPtavs.find((p) => p.attribute_line_id === rimSizeLineId)
+        ? variantPtavs.find((p) => ptavToLineId.get(p.id) === rimSizeLineId)
         : undefined;
 
-      // Build a flat map of all attribute values on this variant for the
-      // `attributes` field — useful for debugging and future frontend use.
+      // Full attribute map for the `attributes` field — useful for the frontend
+      // and for debugging unexpected N/A values.
       const attributes: Record<string, string> = {};
       for (const ptav of variantPtavs) {
-        const attrName = attrLineIdToName.get(ptav.attribute_line_id);
+        const lineId   = ptavToLineId.get(ptav.id);
+        const attrName = lineId !== undefined ? lineIdToAttrName.get(lineId) : undefined;
         if (attrName) attributes[attrName] = ptav.name;
       }
 
@@ -157,7 +171,7 @@ export class ProductsService {
         sku:        v.default_code || `tmpl-${templateId}-var-${v.id}`,
         position:   positionPtav?.name ?? 'N/A',
         rimSize:    rimSizePtav?.name  ?? 'N/A',
-        attributes,                               // full attribute map for debugging
+        attributes,
         price:      this._formatPrice(rawPrice, site.currency),
         available:  v.active,
       };
@@ -216,7 +230,6 @@ export class ProductsService {
       const addOnPrices     = addOnVariantIds.length
         ? await this.odoo.getPricelistPrices(site.pricelistId, addOnVariantIds)
         : {};
-      console.log("🚀 ~ ProductsService ~ getProduct ~ addOnPrices:", addOnPrices)
 
       shapedAddOns = addOnTemplates.map((t) => {
         const defaultVariant = variantsByTemplate.get(t.id)?.[0];
