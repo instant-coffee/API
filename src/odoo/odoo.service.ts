@@ -24,22 +24,6 @@ import {
 export class OdooService implements OnModuleInit {
   private readonly logger = new Logger(OdooService.name);
 
-  /**
-   * Ordered list of pricelist RPC method names to probe.
-   *
-   * Why this exists:
-   * - Different Odoo versions/custom modules may expose different helpers.
-   * - We prefer a deterministic order so behavior is stable across requests.
-   *
-   * Current strategy order:
-   * 1) `get_products_price`  → common in many installations
-   * 2) `_get_products_price` → alternative/private-style helper seen in some setups
-   */
-  private static readonly PRICELIST_METHOD_CANDIDATES = [
-    'get_products_price',
-    '_get_products_price',
-  ] as const;
-
   private readonly baseUrl: string;
   private readonly db: string;
   private readonly login: string;
@@ -47,18 +31,6 @@ export class OdooService implements OnModuleInit {
 
   private session: OdooSession | null = null;
   private _requestId = 1;
-
-  /**
-   * Memoized pricelist method decision.
-   *
-   * - `null`:  not probed yet in this process, so we should probe candidates.
-   * - method: one candidate succeeded earlier; reuse it first for speed.
-   * - `none`: all candidates failed; skip probing and return fallback immediately.
-   */
-  private _resolvedPricelistMethod:
-    | (typeof OdooService.PRICELIST_METHOD_CANDIDATES)[number]
-    | 'none'
-    | null = null;
 
   constructor(
     private readonly http: HttpService,
@@ -206,148 +178,60 @@ export class OdooService implements OnModuleInit {
   }
 
   /**
-   * Get pricelist-adjusted prices for product variants with cross-version fallback.
+   * Get pricelist-adjusted prices for product variants — Odoo 19 compatible.
    *
-   * Behavior:
-   * - Tries known pricelist RPC helpers in a deterministic order.
-   * - Normalizes heterogeneous Odoo return shapes into `{ [variantId]: price }`.
-   * - Caches the first successful method for future calls (process-local memoization).
-   * - If all candidates fail, returns `{}` so callers can safely fall back to
-   *   product `lst_price` without failing the request.
+   * `product.pricelist.get_products_price()` no longer exists as a public RPC
+   * method. The correct approach is to pass `pricelist` in the RPC context
+   * when reading `product.product`, which causes Odoo to evaluate the
+   * `price` compute field against that pricelist server-side.
    *
-   * Performance notes:
-   * - The probing phase happens at most once per process until a method is found
-   *   (or we determine no candidate exists).
-   * - After that, only the resolved method is attempted.
+   * Returns {} on any failure so callers can safely fall back to lst_price.
    *
    * @param pricelistId  Odoo pricelist ID
    * @param variantIds   Array of product.product IDs
-   * @param quantity     Quantity (default 1)
-   * @returns Record keyed by variant ID, with numeric final prices.
+   * @param quantity     Quantity (default 1 — affects tiered pricelist rules)
    */
   async getPricelistPrices(
     pricelistId: number,
     variantIds: number[],
     quantity = 1,
   ): Promise<Record<number, number>> {
-    this.logger.debug(
-      `Getting pricelist prices for variants [${variantIds.join(', ')}] with pricelist ${pricelistId}`,
-    );
-
     if (!variantIds?.length) return {};
 
-    if (this._resolvedPricelistMethod === 'none') {
+    try {
+      // Pass pricelist + quantity in context. Odoo's `price` compute field on
+      // product.product reads these to apply pricelist rules server-side.
+      const results = await this.callKw<{ id: number; price: number }[]>(
+        'product.product',
+        'search_read',
+        [[['id', 'in', variantIds]]],
+        {
+          fields:  ['id', 'price'],
+          context: {
+            pricelist: pricelistId,
+            quantity,
+            lang: 'en_US',
+            tz:   'America/Vancouver',
+          },
+        },
+      );
+
+      const priceMap: Record<number, number> = {};
+      for (const r of results) {
+        if (typeof r.price === 'number') priceMap[r.id] = r.price;
+      }
+
+      this.logger.debug(
+        `Pricelist ${pricelistId} prices resolved for ${Object.keys(priceMap).length} variants via context`,
+      );
+
+      return priceMap;
+    } catch (err: any) {
+      this.logger.warn(`getPricelistPrices failed, falling back to lst_price: ${err?.message}`);
       return {};
     }
-
-    const quantities = Array(variantIds.length).fill(quantity);
-
-    const methodsToTry = this._resolvedPricelistMethod
-      ? [this._resolvedPricelistMethod]
-      : [...OdooService.PRICELIST_METHOD_CANDIDATES];
-
-    for (const methodName of methodsToTry) {
-      const response = await this._tryGetPricelistPricesByMethod(
-        methodName,
-        pricelistId,
-        variantIds,
-        quantities,
-      );
-
-      if (response) {
-        this._resolvedPricelistMethod = methodName;
-        return response;
-      }
-    }
-
-    this._resolvedPricelistMethod = 'none';
-    this.logger.warn(
-      'No compatible pricelist RPC method found. Falling back to product list prices.',
-    );
-    return {};
   }
 
-  /**
-   * Attempt one specific Odoo pricelist method and normalize its output.
-   *
-   * Input contract we send:
-   * - args: `[pricelistId, variantIds, quantities]`
-   *
-   * Normalization contract we return:
-   * - `{ [variantId]: number }`
-   *
-   * If the method does not exist or returns an unsupported shape, we return
-   * `null` so caller can try the next candidate.
-   */
-  private async _tryGetPricelistPricesByMethod(
-    methodName: (typeof OdooService.PRICELIST_METHOD_CANDIDATES)[number],
-    pricelistId: number,
-    variantIds: number[],
-    quantities: number[],
-  ): Promise<Record<number, number> | null> {
-    try {
-      const rawResult = await this.callKw<any>(
-        'product.pricelist',
-        methodName,
-        [pricelistId, variantIds, quantities],
-      );
-
-      const normalized = this._normalizePricelistResult(rawResult, pricelistId);
-
-      this.logger.debug(`Using pricelist RPC method: product.pricelist.${methodName}`);
-      return normalized;
-    } catch (err: any) {
-      this.logger.warn(
-        `Pricelist method product.pricelist.${methodName} unavailable/failed: ${err?.message ?? err}`,
-      );
-      return null;
-    }
-  }
-
-  /**
-   * Normalize various Odoo pricelist response shapes into a strict number map.
-   *
-   * Known shapes observed in Odoo/custom deployments:
-   * - `{ "81368": 1080, "81369": 1080 }`
-   * - `{ "81368": { "1": 1080 }, "81369": { "1": 1080 } }`
-   *   where nested key may be the pricelist id as string.
-   *
-   * Unsupported or malformed values are ignored rather than throwing, to keep
-   * pricing resilient and allow caller-level fallback to `lst_price`.
-   */
-  private _normalizePricelistResult(
-    result: unknown,
-    pricelistId: number,
-  ): Record<number, number> {
-    const normalized: Record<number, number> = {};
-
-    if (!result || typeof result !== 'object') {
-      return normalized;
-    }
-
-    const root = result as Record<string, unknown>;
-    const pricelistKey = String(pricelistId);
-
-    for (const [rawProductId, rawValue] of Object.entries(root)) {
-      const productId = Number(rawProductId);
-      if (!Number.isFinite(productId)) continue;
-
-      if (typeof rawValue === 'number' && Number.isFinite(rawValue)) {
-        normalized[productId] = rawValue;
-        continue;
-      }
-
-      if (rawValue && typeof rawValue === 'object') {
-        const nested = rawValue as Record<string, unknown>;
-        const nestedValue = nested[pricelistKey];
-        if (typeof nestedValue === 'number' && Number.isFinite(nestedValue)) {
-          normalized[productId] = nestedValue;
-        }
-      }
-    }
-
-    return normalized;
-  }
 
   // ─── Session helpers ───────────────────────────────────────────────────────
 
