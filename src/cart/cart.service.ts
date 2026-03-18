@@ -30,6 +30,7 @@ export class CartService {
     dto: CreateCartDto,
     site: SiteContext,
     dealerPartnerId?: number,   // set if authenticated dealer
+    dealerPricelistId?: number, // set from dealer JWT payload
   ): Promise<CreateOrderResult> {
 
     // ── 1. Resolve or create res.partner ─────────────────────────────────────
@@ -38,7 +39,8 @@ export class CartService {
     // ── 2. Build sale.order header ────────────────────────────────────────────
     const orderVals: Record<string, any> = {
       partner_id:    partnerId,
-      pricelist_id:  dealerPartnerId ? site.dealerPricelistId : site.pricelistId,
+      // Dealers get their assigned pricelist from JWT; guests use site default.
+      pricelist_id:  dealerPricelistId ?? site.pricelistId,
       // Note: website_id can be set here once multi-website is configured
     };
 

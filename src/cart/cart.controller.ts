@@ -28,9 +28,10 @@ export class CartController {
     @Headers('x-site-context') siteHeader?: string,
     @Request() req?: any,
   ) {
-    const site             = resolveSiteContext(siteHeader ?? dto.siteId);
-    const dealerPartnerId  = req?.user?.odooPartnerId ?? undefined;
+    const site = resolveSiteContext(siteHeader ?? dto.siteId);
+    const dealerPartnerId = req?.user?.odooPartnerId ?? undefined;
+    const dealerPricelistId = req?.user?.pricelistId ?? undefined;
 
-    return this.cart.createOrder(dto, site, dealerPartnerId);
+    return this.cart.createOrder(dto, site, dealerPartnerId, dealerPricelistId);
   }
 }
