@@ -6,6 +6,7 @@ import {
   OdooAttributeLine,
   OdooAttribute,
   OdooTemplateAttributeValue,
+  OdooProductTag,
 } from '../odoo/types/odoo.types';
 import { SiteContext } from '../config/site-context';
 import {
@@ -46,7 +47,7 @@ export class ProductsService {
       'product.template',
       [['id', '=', templateId]],
       [
-        'id', 'name', 'list_price', 'description_sale',
+        'id', 'name', 'list_price', 'description_ecommerce',
         'attribute_line_ids', 'product_variant_ids',
         'optional_product_ids', 'active',
       ],
@@ -253,7 +254,272 @@ export class ProductsService {
       id:          template.id,
       name:        template.name,
       brand:       'nobl',   // TODO: derive from product category or x_brand field
-      description: template.description_sale || '',
+      description: template.description_ecommerce || '',
+      currency:    site.currency,
+      variants:    shapedVariants,
+      options:     shapedOptions,
+      addOns:      shapedAddOns,
+    };
+  }
+
+  // ─── Get a product family grouped by tag ──────────────────────────────────
+  //
+  // For products structured as separate Odoo templates (Front Wheel / Rear Wheel /
+  // Wheelset), this method stitches them into a single ProductResponseDto that
+  // the WheelConfigurator can consume without any frontend changes.
+  //
+  // Variant position is derived from the product's name/role, not from a
+  // "Wheelset Options" attribute (which only exists on single-template products
+  // like the Ethos Enduro).
+
+  async getProductFamily(
+    familyTag: string,
+    site: SiteContext,
+  ): Promise<ProductResponseDto> {
+    this.logger.log(`Fetching family "${familyTag}" for site ${site.siteId}`);
+
+    // ── 1. Find all templates carrying this family tag ────────────────────────
+    const templates = await this.odoo.searchRead<OdooProductTemplate>(
+      'product.template',
+      [['tag_ids.name', '=', familyTag], ['active', '=', true]],
+      [
+        'id', 'name', 'list_price', 'description_ecommerce',
+        'attribute_line_ids', 'product_variant_ids', 'optional_product_ids',
+      ],
+    );
+
+    if (!templates.length) {
+      throw new NotFoundException(
+        `No products found for family tag "${familyTag}"`,
+      );
+    }
+
+    // ── 2. Assign role to each template ───────────────────────────────────────
+    const roledTemplates = templates.map((t) => ({
+      template: t,
+      role: this._detectFamilyRole(t.name),
+    }));
+
+    // ── 3. Batch-fetch attribute lines for all templates ──────────────────────
+    const allLineIds = roledTemplates.flatMap(
+      ({ template }) => template.attribute_line_ids,
+    );
+    const allAttrLines = await this.odoo.searchRead<OdooAttributeLine>(
+      'product.template.attribute.line',
+      [['id', 'in', allLineIds]],
+      ['id', 'attribute_id', 'value_ids', 'product_template_value_ids', 'product_tmpl_id'],
+    );
+
+    // ── 3b. Batch-fetch product.attribute for create_variant ──────────────────
+    const uniqueAttrIds = [
+      ...new Set(allAttrLines.map((l) => l.attribute_id[0])),
+    ];
+    const allAttributes = await this.odoo.searchRead<OdooAttribute>(
+      'product.attribute',
+      [['id', 'in', uniqueAttrIds]],
+      ['id', 'name', 'create_variant'],
+    );
+    const createVariantByAttrId = new Map(
+      allAttributes.map((a) => [a.id, a.create_variant]),
+    );
+
+    // ── 3c. Batch-fetch all PTAVs ─────────────────────────────────────────────
+    const allPtavIds = allAttrLines.flatMap((l) => l.product_template_value_ids);
+    const allPtavs   = await this.odoo.searchRead<OdooTemplateAttributeValue>(
+      'product.template.attribute.value',
+      [['id', 'in', allPtavIds]],
+      ['id', 'name', 'attribute_id', 'price_extra', 'ptav_active'],
+    );
+    const ptavById = new Map(allPtavs.map((p) => [p.id, p]));
+
+    // ptavId → lineId (built from each line's product_template_value_ids list)
+    const ptavToLineId = new Map<number, number>();
+    for (const line of allAttrLines) {
+      for (const ptavId of line.product_template_value_ids) {
+        ptavToLineId.set(ptavId, line.id);
+      }
+    }
+
+    // ── 4. Batch-fetch all variants across all templates ──────────────────────
+    const allTemplateIds = templates.map((t) => t.id);
+    const allVariants    = await this.odoo.searchRead<OdooProductVariant>(
+      'product.product',
+      [['product_tmpl_id', 'in', allTemplateIds]],
+      ['id', 'default_code', 'product_template_attribute_value_ids',
+       'price_extra', 'active', 'lst_price', 'product_tmpl_id'],
+    );
+
+    // ── 5. Batch pricelist prices for all variants ────────────────────────────
+    const allVariantIds   = allVariants.map((v) => v.id);
+    const pricelistPrices = await this.odoo.getPricelistPrices(
+      site.pricelistId,
+      allVariantIds,
+    );
+
+    // ── 6. Shape unified variant list ─────────────────────────────────────────
+    const shapedVariants: VariantDto[] = [];
+
+    for (const { template, role } of roledTemplates) {
+      const position = this._roleToPosition(role);
+
+      // Attribute lines for this specific template
+      const tmplLineIds = template.attribute_line_ids;
+      const tmplLines   = allAttrLines.filter((l) => tmplLineIds.includes(l.id));
+
+      // Find the Rim Size line for this template
+      const rimSizeLineId = tmplLines.find(
+        (l) => l.attribute_id[1] === RIM_SIZE_ATTRIBUTE,
+      )?.id;
+
+      const tmplVariants = allVariants.filter(
+        (v) => (v.product_tmpl_id as unknown as [number, string])[0] === template.id,
+      );
+
+      for (const v of tmplVariants) {
+        const variantPtavs = v.product_template_attribute_value_ids
+          .map((id) => ptavById.get(id))
+          .filter((p): p is OdooTemplateAttributeValue => !!p);
+
+        const rimSizePtav = rimSizeLineId !== undefined
+          ? variantPtavs.find((p) => ptavToLineId.get(p.id) === rimSizeLineId)
+          : undefined;
+
+        const attributes: Record<string, string> = {};
+        for (const ptav of variantPtavs) {
+          const lineId   = ptavToLineId.get(ptav.id);
+          const attrName = lineId !== undefined
+            ? allAttrLines.find((l) => l.id === lineId)?.attribute_id[1]
+            : undefined;
+          if (attrName) attributes[attrName] = ptav.name;
+        }
+
+        const rawPrice = pricelistPrices[v.id] ?? v.lst_price;
+
+        shapedVariants.push({
+          id:        v.id,
+          sku:       v.default_code || `tmpl-${template.id}-var-${v.id}`,
+          position,
+          rimSize:   rimSizePtav?.name ?? 'N/A',
+          attributes,
+          price:     this._formatPrice(rawPrice, site.currency),
+          available: v.active,
+        });
+      }
+    }
+
+    // ── 7. Merge no_variant options from all templates ────────────────────────
+    //
+    // Options are collected from each template. If the same option type appears
+    // on multiple templates (e.g. Brake Interface on both FW and RW), we keep
+    // the first instance and merge the visibleFor arrays.
+    //
+    // visibleFor is derived from the role of the template the option came from,
+    // not from the stored FREEHUB_VISIBLE_FOR constant — allowing any product
+    // combination to define which positions need a given option.
+
+    const optionMap = new Map<string, WheelOptionDto>();
+
+    for (const { template, role } of roledTemplates) {
+      const position  = this._roleToPosition(role);
+      const tmplLines = allAttrLines.filter(
+        (l) => template.attribute_line_ids.includes(l.id),
+      );
+      const noVariantLines = tmplLines.filter(
+        (l) => createVariantByAttrId.get(l.attribute_id[0]) === 'no_variant',
+      );
+
+      for (const line of noVariantLines) {
+        const attrName  = line.attribute_id[1];
+        const isFreehub = attrName === FREEHUB_ATTRIBUTE;
+        const isBrake   = attrName === BRAKE_ATTRIBUTE;
+        const typeKey   = isFreehub ? 'freehub'
+                        : isBrake  ? 'brakeInterface'
+                        : attrName.toLowerCase().replace(/\s+/g, '_');
+
+        const values = line.product_template_value_ids
+          .map((id) => ptavById.get(id))
+          .filter((p): p is OdooTemplateAttributeValue => !!p)
+          .map((ptav) => ({ id: ptav.id, label: ptav.name }));
+
+        if (optionMap.has(typeKey)) {
+          // Option already registered — just extend visibleFor if not already present
+          const existing = optionMap.get(typeKey)!;
+          if (!existing.visibleFor.includes(position)) {
+            existing.visibleFor.push(position);
+          }
+        } else {
+          optionMap.set(typeKey, {
+            type:       typeKey,
+            label:      attrName,
+            required:   true,
+            visibleFor: [position],
+            values,
+          });
+        }
+      }
+    }
+
+    const shapedOptions = [...optionMap.values()];
+
+    // ── 8. Add-ons from Wheelset template (or first template with optional_products) ──
+    let shapedAddOns: AddOnDto[] = [];
+    const wheelsetTemplate = roledTemplates.find(
+      ({ role }) => role === 'complete',
+    )?.template;
+
+    if (wheelsetTemplate?.optional_product_ids?.length) {
+      const addOnTemplates = await this.odoo.searchRead<OdooProductTemplate>(
+        'product.template',
+        [['id', 'in', wheelsetTemplate.optional_product_ids]],
+        ['id', 'name', 'list_price', 'categ_id'],
+      );
+      const addOnVariants = await this.odoo.searchRead<OdooProductVariant>(
+        'product.product',
+        [['product_tmpl_id', 'in', wheelsetTemplate.optional_product_ids]],
+        ['id', 'default_code', 'product_tmpl_id', 'active'],
+      );
+      const variantsByTemplate = new Map<number, OdooProductVariant[]>();
+      for (const v of addOnVariants) {
+        const tmplId = (v.product_tmpl_id as unknown as [number, string])[0];
+        if (!variantsByTemplate.has(tmplId)) variantsByTemplate.set(tmplId, []);
+        variantsByTemplate.get(tmplId)!.push(v);
+      }
+      const addOnPrices = addOnVariants.length
+        ? await this.odoo.getPricelistPrices(
+            site.pricelistId,
+            addOnVariants.map((v) => v.id),
+          )
+        : {};
+
+      shapedAddOns = addOnTemplates.map((t) => {
+        const defaultVariant = variantsByTemplate.get(t.id)?.[0];
+        const price = defaultVariant
+          ? (addOnPrices[defaultVariant.id] ?? t.list_price)
+          : t.list_price;
+        return {
+          id:         defaultVariant?.id ?? 0,
+          templateId: t.id,
+          name:       t.name,
+          sku:        defaultVariant?.default_code || `addon-${t.id}`,
+          price:      this._formatPrice(price, site.currency),
+          category:   this._classifyAddOn(t.name),
+        };
+      });
+    }
+
+    // ── 9. Derive family display name ─────────────────────────────────────────
+    // Use the Wheelset template name, stripping the role suffix.
+    const baseName = (wheelsetTemplate ?? templates[0]).name
+      .replace(/\s+(wheelset|front wheel|rear wheel)$/i, '')
+      .trim();
+
+    const description = (wheelsetTemplate ?? templates[0]).description_ecommerce || '';
+
+    return {
+      id:          wheelsetTemplate?.id ?? templates[0].id,
+      name:        baseName,
+      brand:       'nobl',
+      description,
       currency:    site.currency,
       variants:    shapedVariants,
       options:     shapedOptions,
@@ -263,22 +529,58 @@ export class ProductsService {
 
   // ─── Get all published products (catalog listing) ─────────────────────────
 
-  async listProducts(site: SiteContext): Promise<Pick<ProductResponseDto, 'id' | 'name' | 'brand' | 'currency'>[]> {
+  async listProducts(
+    site: SiteContext,
+  ): Promise<(Pick<ProductResponseDto, 'id' | 'name' | 'brand' | 'currency'> & { familyTag?: string })[]> {
     const templates = await this.odoo.searchRead<OdooProductTemplate>(
       'product.template',
       [['website_published', '=', true], ['active', '=', true]],
-      ['id', 'name'],
+      ['id', 'name', 'tag_ids'],
     );
 
-    return templates.map((t) => ({
-      id:       t.id,
-      name:     t.name,
-      brand:    'nobl',
-      currency: site.currency,
-    }));
+    // Resolve tag names so we can surface the family tag per product.
+    // Only fetch if any template actually has tags.
+    const allTagIds = [...new Set(templates.flatMap((t) => t.tag_ids ?? []))];
+    const tagNameById = new Map<number, string>();
+
+    if (allTagIds.length) {
+      const tags = await this.odoo.searchRead<OdooProductTag>(
+        'product.tag',
+        [['id', 'in', allTagIds]],
+        ['id', 'name'],
+      );
+      for (const tag of tags) tagNameById.set(tag.id, tag.name);
+    }
+
+    return templates.map((t) => {
+      const familyTag = (t.tag_ids ?? [])
+        .map((id) => tagNameById.get(id) ?? '')
+        .find((name) => name.startsWith('family:'));
+
+      return {
+        id:        t.id,
+        name:      t.name,
+        brand:     'nobl',
+        currency:  site.currency,
+        ...(familyTag ? { familyTag } : {}),
+      };
+    });
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
+
+  private _detectFamilyRole(name: string): 'front' | 'rear' | 'complete' {
+    const n = name.toLowerCase();
+    if (n.includes('front wheel')) return 'front';
+    if (n.includes('rear wheel'))  return 'rear';
+    return 'complete'; // Wheelset / complete set
+  }
+
+  private _roleToPosition(role: 'front' | 'rear' | 'complete'): string {
+    return role === 'front'    ? 'Front Wheel'
+         : role === 'rear'     ? 'Rear Wheel'
+         : 'Complete Wheelset';
+  }
 
   private _formatPrice(amount: number, currency: 'CAD' | 'USD'): PriceDto {
     const locale     = currency === 'CAD' ? 'en-CA' : 'en-US';
