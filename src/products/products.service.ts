@@ -21,8 +21,10 @@ import {
 // Used to identify which attribute lines are no_variant options vs. variants.
 const POSITION_ATTRIBUTE   = 'Wheelset Options';       // creates inventory variants
 const RIM_SIZE_ATTRIBUTE   = 'Rim Size';               // creates inventory variants
-const FREEHUB_ATTRIBUTE    = 'Freehub Type Option';    // no_variant — actual Odoo name
-const BRAKE_ATTRIBUTE      = 'Brake Interface Option'; // no_variant — actual Odoo name
+const FREEHUB_ATTRIBUTE    = 'Freehub Type Option';    // no_variant
+const BRAKE_ATTRIBUTE      = 'Brake Interface Option'; // no_variant
+const FRONT_HUB_ATTRIBUTE  = 'Front Hub Spacing -- Mountain';  // no_variant — FW template
+const REAR_HUB_ATTRIBUTE   = 'Rear Hub Spacing -- Mountain';        // no_variant — RW template
 
 // Freehub is only relevant for rear-wheel builds.
 // Values must match exactly what Odoo returns in the Wheelset Options attribute.
@@ -184,9 +186,8 @@ export class ProductsService {
     );
 
     const shapedOptions: WheelOptionDto[] = noVariantLines.map((line) => {
-      const attrName    = line.attribute_id[1];
-      const isFreehub   = attrName === FREEHUB_ATTRIBUTE;
-      const isBrake     = attrName === BRAKE_ATTRIBUTE;
+      const attrName  = line.attribute_id[1];
+      const isFreehub = attrName === FREEHUB_ATTRIBUTE;
 
       const values = line.product_template_value_ids
         .map((id) => ptavById.get(id))
@@ -194,7 +195,7 @@ export class ProductsService {
         .map((ptav) => ({ id: ptav.id, label: ptav.name }));
 
       return {
-        type:       isFreehub ? 'freehub' : isBrake ? 'brakeInterface' : attrName.toLowerCase(),
+        type:       this._attrNameToTypeKey(attrName),
         label:      attrName,
         required:   true,
         visibleFor: isFreehub ? FREEHUB_VISIBLE_FOR : [],
@@ -281,7 +282,7 @@ export class ProductsService {
     // ── 1. Find all templates carrying this family tag ────────────────────────
     const templates = await this.odoo.searchRead<OdooProductTemplate>(
       'product.template',
-      [['tag_ids.name', '=', familyTag], ['active', '=', true]],
+      [['product_tag_ids.name', '=', familyTag], ['active', '=', true]],
       [
         'id', 'name', 'list_price', 'description_ecommerce',
         'attribute_line_ids', 'product_variant_ids', 'optional_product_ids',
@@ -430,11 +431,7 @@ export class ProductsService {
 
       for (const line of noVariantLines) {
         const attrName  = line.attribute_id[1];
-        const isFreehub = attrName === FREEHUB_ATTRIBUTE;
-        const isBrake   = attrName === BRAKE_ATTRIBUTE;
-        const typeKey   = isFreehub ? 'freehub'
-                        : isBrake  ? 'brakeInterface'
-                        : attrName.toLowerCase().replace(/\s+/g, '_');
+        const typeKey   = this._attrNameToTypeKey(attrName);
 
         const values = line.product_template_value_ids
           .map((id) => ptavById.get(id))
@@ -460,6 +457,24 @@ export class ProductsService {
     }
 
     const shapedOptions = [...optionMap.values()];
+
+    // ── 7b. Ensure Complete Wheelset inherits all options ─────────────────────
+    //
+    // The Wheelset template typically has no no_variant attribute lines of its
+    // own — those live on the FW and RW templates. But a complete wheelset order
+    // always includes both wheels, so every option that applies to any component
+    // wheel must also be shown when position === "Complete Wheelset".
+    //
+    // We simply add "Complete Wheelset" to every option's visibleFor if this
+    // family actually contains a complete-role template.
+    const hasComplete = roledTemplates.some(({ role }) => role === 'complete');
+    if (hasComplete) {
+      for (const option of shapedOptions) {
+        if (!option.visibleFor.includes('Complete Wheelset')) {
+          option.visibleFor.push('Complete Wheelset');
+        }
+      }
+    }
 
     // ── 8. Add-ons from Wheelset template (or first template with optional_products) ──
     let shapedAddOns: AddOnDto[] = [];
@@ -535,12 +550,12 @@ export class ProductsService {
     const templates = await this.odoo.searchRead<OdooProductTemplate>(
       'product.template',
       [['website_published', '=', true], ['active', '=', true]],
-      ['id', 'name', 'tag_ids'],
+      ['id', 'name', 'product_tag_ids'],
     );
 
     // Resolve tag names so we can surface the family tag per product.
     // Only fetch if any template actually has tags.
-    const allTagIds = [...new Set(templates.flatMap((t) => t.tag_ids ?? []))];
+    const allTagIds = [...new Set(templates.flatMap((t) => t.product_tag_ids ?? []))];
     const tagNameById = new Map<number, string>();
 
     if (allTagIds.length) {
@@ -553,7 +568,7 @@ export class ProductsService {
     }
 
     return templates.map((t) => {
-      const familyTag = (t.tag_ids ?? [])
+      const familyTag = (t.product_tag_ids ?? [])
         .map((id) => tagNameById.get(id) ?? '')
         .find((name) => name.startsWith('family:'));
 
@@ -568,6 +583,20 @@ export class ProductsService {
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
+
+  // ─── Map Odoo attribute name → stable camelCase type key ──────────────────
+  // Used in both getProduct and getProductFamily so the frontend always receives
+  // consistent type keys regardless of how Odoo names the attribute.
+  private _attrNameToTypeKey(attrName: string): string {
+    switch (attrName) {
+      case FREEHUB_ATTRIBUTE:    return 'freehub';
+      case BRAKE_ATTRIBUTE:      return 'brakeInterface';
+      case FRONT_HUB_ATTRIBUTE:  return 'frontHub';
+      case REAR_HUB_ATTRIBUTE:   return 'rearHub';
+      default:
+        return attrName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    }
+  }
 
   private _detectFamilyRole(name: string): 'front' | 'rear' | 'complete' {
     const n = name.toLowerCase();
