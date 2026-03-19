@@ -20,8 +20,9 @@ export interface VariantDto {
 }
 
 export interface AttributeValueDto {
-  id:    number;
-  label: string;
+  id:          number;
+  label:       string;
+  priceExtra?: PriceDto;   // only present when price_extra > 0 in Odoo
 }
 
 export interface WheelOptionDto {

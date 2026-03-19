@@ -193,7 +193,11 @@ export class ProductsService {
       const values = line.product_template_value_ids
         .map((id) => ptavById.get(id))
         .filter((p): p is OdooTemplateAttributeValue => !!p)
-        .map((ptav) => ({ id: ptav.id, label: ptav.name }));
+        .map((ptav) => ({
+          id:    ptav.id,
+          label: ptav.name,
+          ...(ptav.price_extra ? { priceExtra: this._formatPrice(ptav.price_extra, site.currency) } : {}),
+        }));
 
       return {
         type:       this._attrNameToTypeKey(attrName),
@@ -437,7 +441,11 @@ export class ProductsService {
         const values = line.product_template_value_ids
           .map((id) => ptavById.get(id))
           .filter((p): p is OdooTemplateAttributeValue => !!p)
-          .map((ptav) => ({ id: ptav.id, label: ptav.name }));
+          .map((ptav) => ({
+          id:    ptav.id,
+          label: ptav.name,
+          ...(ptav.price_extra ? { priceExtra: this._formatPrice(ptav.price_extra, site.currency) } : {}),
+        }));
 
         if (optionMap.has(typeKey)) {
           // Option already registered — just extend visibleFor if not already present
