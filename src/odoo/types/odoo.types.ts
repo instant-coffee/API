@@ -47,7 +47,7 @@ export interface OdooProductTemplate {
   categ_id: [number, string];
   attribute_line_ids: number[];
   product_variant_ids: number[];
-  tag_ids: number[];                           // Many2many → product.tag IDs
+  product_tag_ids: number[];                           // Many2many → product.tag IDs
   active: boolean;
   website_published: boolean;
   optional_product_ids: number[];
