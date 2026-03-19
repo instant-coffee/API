@@ -32,15 +32,22 @@ export interface OdooAuthResult {
   company_id: number;
 }
 
+// ─── Raw product.tag record ───────────────────────────────────────────────────
+export interface OdooProductTag {
+  id: number;
+  name: string;
+}
+
 // ─── Raw product.template record ─────────────────────────────────────────────
 export interface OdooProductTemplate {
   id: number;
   name: string;
   list_price: number;                          // CAD base (complete wheelset)
-  description_sale: string | false;
+  description_ecommerce: string | false;
   categ_id: [number, string];
   attribute_line_ids: number[];
   product_variant_ids: number[];
+  tag_ids: number[];                           // Many2many → product.tag IDs
   active: boolean;
   website_published: boolean;
   optional_product_ids: number[];
@@ -73,6 +80,7 @@ export interface OdooAttributeLine {
   attribute_id: [number, string];
   value_ids: number[];
   product_template_value_ids: number[];
+  product_tmpl_id?: [number, string]; // present when fetched across multiple templates
   // create_variant is on product.attribute — fetched separately and joined by attribute_id
 }
 
