@@ -24,7 +24,8 @@ const RIM_SIZE_ATTRIBUTE   = 'Rim Size';               // creates inventory vari
 const FREEHUB_ATTRIBUTE    = 'Freehub Type Option';    // no_variant
 const BRAKE_ATTRIBUTE      = 'Brake Interface Option'; // no_variant
 const FRONT_HUB_ATTRIBUTE  = 'Front Hub Spacing -- Mountain';  // no_variant — FW template
-const REAR_HUB_ATTRIBUTE   = 'Rear Hub Spacing -- Mountain';        // no_variant — RW template
+const REAR_HUB_ATTRIBUTE   = 'Rear Hub Spacing -- Mountain';   // no_variant — RW template
+const TORQUE_CAP_ATTRIBUTE = 'Torque Cap Option';              // no_variant — FW template, only with 110 x 15
 
 // Freehub is only relevant for rear-wheel builds.
 // Values must match exactly what Odoo returns in the Wheelset Options attribute.
@@ -593,6 +594,7 @@ export class ProductsService {
       case BRAKE_ATTRIBUTE:      return 'brakeInterface';
       case FRONT_HUB_ATTRIBUTE:  return 'frontHub';
       case REAR_HUB_ATTRIBUTE:   return 'rearHub';
+      case TORQUE_CAP_ATTRIBUTE: return 'torqueCap';
       default:
         return attrName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
     }
