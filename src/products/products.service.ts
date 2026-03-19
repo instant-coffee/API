@@ -31,6 +31,10 @@ const TORQUE_CAP_ATTRIBUTE = 'Torque Cap Option';              // no_variant —
 // Values must match exactly what Odoo returns in the Wheelset Options attribute.
 const FREEHUB_VISIBLE_FOR  = ['Rear Wheel', 'Complete Wheelset'];
 
+// Options that are optional (required: false in the response).
+// Everything else is required by default.
+const OPTIONAL_OPTION_TYPES = new Set(['torqueCap']);
+
 @Injectable()
 export class ProductsService {
   private readonly logger = new Logger(ProductsService.name);
@@ -199,10 +203,11 @@ export class ProductsService {
           ...(ptav.price_extra ? { priceExtra: this._formatPrice(ptav.price_extra, site.currency) } : {}),
         }));
 
+      const typeKey = this._attrNameToTypeKey(attrName);
       return {
-        type:       this._attrNameToTypeKey(attrName),
+        type:       typeKey,
         label:      attrName,
-        required:   true,
+        required:   !OPTIONAL_OPTION_TYPES.has(typeKey),
         visibleFor: isFreehub ? FREEHUB_VISIBLE_FOR : [],
         values,
       };
@@ -457,7 +462,7 @@ export class ProductsService {
           optionMap.set(typeKey, {
             type:       typeKey,
             label:      attrName,
-            required:   true,
+            required:   !OPTIONAL_OPTION_TYPES.has(typeKey),
             visibleFor: [position],
             values,
           });
