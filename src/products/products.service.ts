@@ -29,8 +29,8 @@ const TORQUE_CAP_ATTRIBUTE   = 'Torque Cap Option';            // no_variant —
 const VALVE_BRAND_ATTRIBUTE  = 'Valve Brand Option';           // no_variant — FW + RW templates
 const NOBL_CAP_ATTRIBUTE     = 'NOBL Cap Colour';              // no_variant — FW + RW; shown only when NOBL valve selected
 const PEATYS_COL_ATTRIBUTE   = "Peaty's Colour";               // no_variant — FW + RW; shown only when Peaty's valve selected
-const GRAPHIC_ATTRIBUTE      = 'Graphic Option';               // no_variant — FW + RW templates
-const DECAL_COLOUR_ATTRIBUTE = 'Decal Colour';                 // no_variant — FW + RW; shown only when Full Letter Decals selected
+const GRAPHIC_ATTRIBUTE      = 'Signature Graphic Option';               // no_variant — FW + RW templates
+const DECAL_COLOUR_ATTRIBUTE = 'Signature Full Letter Decals';                 // no_variant — FW + RW; shown only when Full Letter Decals selected
 
 // Freehub is only relevant for rear-wheel builds.
 // Values must match exactly what Odoo returns in the Wheelset Options attribute.
