@@ -25,7 +25,10 @@ const FREEHUB_ATTRIBUTE    = 'Freehub Type Option';    // no_variant
 const BRAKE_ATTRIBUTE      = 'Brake Interface Option'; // no_variant
 const FRONT_HUB_ATTRIBUTE  = 'Front Hub Spacing -- Mountain';  // no_variant — FW template
 const REAR_HUB_ATTRIBUTE   = 'Rear Hub Spacing -- Mountain';   // no_variant — RW template
-const TORQUE_CAP_ATTRIBUTE = 'Torque Cap Option';              // no_variant — FW template, only with 110 x 15
+const TORQUE_CAP_ATTRIBUTE   = 'Torque Cap Option';            // no_variant — FW template, only with 110 x 15
+const VALVE_BRAND_ATTRIBUTE  = 'Valve Brand Option';           // no_variant — FW + RW templates
+const NOBL_CAP_ATTRIBUTE     = 'NOBL Cap Colour';              // no_variant — FW + RW; shown only when NOBL valve selected
+const PEATYS_COL_ATTRIBUTE   = "Peaty's Colour";               // no_variant — FW + RW; shown only when Peaty's valve selected
 
 // Freehub is only relevant for rear-wheel builds.
 // Values must match exactly what Odoo returns in the Wheelset Options attribute.
@@ -607,7 +610,10 @@ export class ProductsService {
       case BRAKE_ATTRIBUTE:      return 'brakeInterface';
       case FRONT_HUB_ATTRIBUTE:  return 'frontHub';
       case REAR_HUB_ATTRIBUTE:   return 'rearHub';
-      case TORQUE_CAP_ATTRIBUTE: return 'torqueCap';
+      case TORQUE_CAP_ATTRIBUTE:   return 'torqueCap';
+      case VALVE_BRAND_ATTRIBUTE:  return 'valveBrand';
+      case NOBL_CAP_ATTRIBUTE:     return 'noblCapColour';
+      case PEATYS_COL_ATTRIBUTE:   return 'peatysColour';
       default:
         return attrName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
     }
