@@ -248,6 +248,13 @@ export class OdooService implements OnModuleInit {
     const url = `${this.baseUrl}${endpoint}`;
     const id  = this._requestId++;
 
+    // DEBUG — log every outbound Odoo RPC call (model + method + args summary).
+    // Only visible when LOG_LEVEL=debug. Safe to leave on in development.
+    const model  = params.model  ?? '—';
+    const method = params.method ?? '—';
+    const argsPreview = JSON.stringify(params.args ?? []).slice(0, 200);
+    this.logger.debug(`→ Odoo RPC #${id} ${model}.${method}() args=${argsPreview}`);
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -273,6 +280,8 @@ export class OdooService implements OnModuleInit {
       this.logger.error(`HTTP error calling Odoo ${endpoint}: ${err.message}`);
       throw new InternalServerErrorException(`Odoo request failed: ${err.message}`);
     }
+
+    this.logger.debug(`← Odoo RPC #${id} ${model}.${method}() OK`);
 
     if (body.error) {
       const msg = body.error.data?.message ?? body.error.message;

@@ -44,16 +44,19 @@ export class CartService {
       // Note: website_id can be set here once multi-website is configured
     };
 
-    // Optional bike build note — written to the standard sale.order note field
-    // so manufacturing / fulfilment can see what the wheels are built for.
+    // Optional bike build note — written to x_internal_note (custom Html field,
+    // Other Info tab) so it stays off customer-facing documents. The field was
+    // created as Html type in Odoo, so we write proper HTML rather than plain text.
     if (dto.bikeDetails) {
       const b = dto.bikeDetails;
       const bikeLine = [b.year, b.make, b.model].filter(Boolean).join(' ');
       const parts: string[] = [];
-      if (bikeLine) parts.push(`Bike: ${bikeLine}`);
-      if (b.notes)  parts.push(`Notes: ${b.notes}`);
-      if (parts.length) orderVals['note'] = parts.join('\n');
+      if (bikeLine) parts.push(`<strong>Bike:</strong> ${bikeLine}`);
+      if (b.notes)  parts.push(`<strong>Notes:</strong> ${b.notes}`);
+      if (parts.length) orderVals['x_internal_note'] = parts.join('<br/>');
     }
+
+    this.logger.log(`Creating sale.order — vals: ${JSON.stringify(orderVals)}`);
 
     const orderId = await this.odoo.callKw<number>(
       'sale.order',
@@ -61,7 +64,7 @@ export class CartService {
       [orderVals],
     );
 
-    this.logger.log(`Created sale.order ${orderId} for site ${site.siteId}`);
+    this.logger.log(`✓ sale.order created: id=${orderId} site=${site.siteId}`);
 
     // ── 3. Create order lines ─────────────────────────────────────────────────
     for (const line of dto.lines) {
@@ -80,15 +83,35 @@ export class CartService {
         ];
       }
 
-      await this.odoo.callKw<number>(
+      this.logger.log(`  Creating order line — vals: ${JSON.stringify(lineVals)}`);
+
+      const lineId = await this.odoo.callKw<number>(
         'sale.order.line',
         'create',
         [lineVals],
       );
 
+      // ── Explicit unit price (write after create) ──────────────────────────
+      // sale.order.line has a _compute_price_unit method that fires during the
+      // ORM create transaction and resets price_unit back to the pricelist price,
+      // overriding any value passed in the create vals.
+      //
+      // The fix is a separate write() call after the line is created — at that
+      // point the compute chain has already run and the explicit value sticks.
+      // This is the standard Odoo pattern for overriding computed-stored fields
+      // via JSON-RPC.
+      if (line.unitPrice !== undefined) {
+        await this.odoo.callKw(
+          'sale.order.line',
+          'write',
+          [[lineId], { price_unit: line.unitPrice }],
+        );
+        this.logger.log(`  ✓ price_unit overridden → ${line.unitPrice}`);
+      }
+
       this.logger.log(
-        `Created order line: variant ${line.variantId}, ` +
-        `no_variant attrs: [${line.noVariantValueIds?.join(', ') ?? 'none'}]`,
+        `  ✓ sale.order.line id=${lineId} | variant=${line.variantId} | ` +
+        `no_variant_ptav_ids=[${line.noVariantValueIds?.join(', ') ?? 'none'}]`,
       );
     }
 
@@ -96,8 +119,38 @@ export class CartService {
     const [order] = await this.odoo.searchRead<OdooSaleOrder>(
       'sale.order',
       [['id', '=', orderId]],
-      ['id', 'name', 'amount_total', 'currency_id'],
+      ['id', 'name', 'amount_total', 'currency_id', 'x_internal_note', 'order_line'],
     );
+
+    this.logger.log(
+      `✓ Order confirmed: ${order.name} | total=${order.amount_total} ${order.currency_id[1]} | ` +
+      `lines=${JSON.stringify(order.order_line)} | ` +
+      `x_internal_note=${order.x_internal_note ? `"${String(order.x_internal_note).replace(/\n/g, ' | ')}"` : 'none'}`,
+    );
+
+    // ── 5. Read back order lines to verify no_variant attrs were applied ──────
+    if (order.order_line?.length) {
+      const lines = await this.odoo.searchRead<{
+        id: number;
+        name: string;
+        product_id: [number, string];
+        product_uom_qty: number;
+        price_unit: number;
+        product_no_variant_attribute_value_ids: number[];
+      }>(
+        'sale.order.line',
+        [['id', 'in', order.order_line]],
+        ['id', 'name', 'product_id', 'product_uom_qty', 'price_unit', 'product_no_variant_attribute_value_ids'],
+      );
+
+      for (const ln of lines) {
+        this.logger.log(
+          `  Line ${ln.id}: "${ln.product_id[1]}" | qty=${ln.product_uom_qty} | ` +
+          `price_unit=${ln.price_unit} | ` +
+          `no_variant_ptav_ids=[${ln.product_no_variant_attribute_value_ids?.join(', ') ?? 'none'}]`,
+        );
+      }
+    }
 
     return {
       orderId:   order.id,

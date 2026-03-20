@@ -119,6 +119,9 @@ export interface OdooSaleOrder {
   state: 'draft' | 'sent' | 'sale' | 'done' | 'cancel';
   amount_total: number;
   currency_id: [number, string];
+  note?: string | false;                      // terms & conditions (customer-facing, bottom of PDF)
+  x_internal_note?: string | false;             // Custom internal build notes (Other Info tab, not customer-facing)
+  order_line?: number[];                      // IDs of sale.order.line records
 }
 
 // ─── Odoo session state (in-memory) ──────────────────────────────────────────

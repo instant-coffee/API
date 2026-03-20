@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Headers, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, Headers, UseGuards, Request, Logger } from '@nestjs/common';
 import { CartService } from './cart.service';
 import { CreateCartDto } from './dto/create-cart.dto';
 import { resolveSiteContext } from '../config/site-context';
@@ -6,6 +6,8 @@ import { OptionalJwtGuard } from '../auth/guards/optional-jwt.guard';
 
 @Controller('cart')
 export class CartController {
+  private readonly logger = new Logger(CartController.name);
+
   constructor(private readonly cart: CartService) {}
 
   /**
@@ -29,8 +31,22 @@ export class CartController {
     @Request() req?: any,
   ) {
     const site = resolveSiteContext(siteHeader ?? dto.siteId);
-    const dealerPartnerId = req?.user?.odooPartnerId ?? undefined;
-    const dealerPricelistId = req?.user?.pricelistId ?? undefined;
+    const dealerPartnerId   = req?.user?.odooPartnerId ?? undefined;
+    const dealerPricelistId = req?.user?.pricelistId   ?? undefined;
+
+    this.logger.log(
+      `POST /cart — site: ${site.siteId} | ` +
+      `lines: ${dto.lines.length} | ` +
+      `dealer: ${dealerPartnerId ?? 'guest'} | ` +
+      `bikeDetails: ${dto.bikeDetails ? JSON.stringify(dto.bikeDetails) : 'none'}`,
+    );
+
+    dto.lines.forEach((line, i) => {
+      this.logger.log(
+        `  Line ${i + 1}: variantId=${line.variantId} qty=${line.quantity} ` +
+        `noVariantIds=[${line.noVariantValueIds?.join(', ') ?? 'none'}]`,
+      );
+    });
 
     return this.cart.createOrder(dto, site, dealerPartnerId, dealerPricelistId);
   }

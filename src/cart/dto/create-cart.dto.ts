@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString, IsArray, ValidateNested, IsEmail, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsArray, ValidateNested, IsEmail, Min, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
 
 // ─── Individual line item ─────────────────────────────────────────────────────
@@ -20,6 +20,16 @@ export class CartLineDto {
   @IsInt({ each: true })
   @IsOptional()
   noVariantValueIds?: number[];
+
+  /**
+   * Pre-computed unit price including all no_variant price_extra surcharges.
+   * Sent by the frontend so Odoo sets the correct price_unit without needing
+   * an ORM onchange round-trip (programmatic line creation skips onchange).
+   * When absent, Odoo resolves the price from the active pricelist.
+   */
+  @IsNumber()
+  @IsOptional()
+  unitPrice?: number;
 }
 
 // ─── Customer info ────────────────────────────────────────────────────────────
