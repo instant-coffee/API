@@ -39,6 +39,26 @@ export class CustomerDto {
   phone?: string;
 }
 
+// ─── Bike details (optional build notes) ─────────────────────────────────────
+
+export class BikeDetailsDto {
+  @IsString()
+  @IsOptional()
+  make?: string;
+
+  @IsString()
+  @IsOptional()
+  model?: string;
+
+  @IsString()
+  @IsOptional()
+  year?: string;
+
+  @IsString()
+  @IsOptional()
+  notes?: string;
+}
+
 // ─── Full cart / order request ────────────────────────────────────────────────
 
 export class CreateCartDto {
@@ -60,4 +80,14 @@ export class CreateCartDto {
   @IsString()
   @IsOptional()
   siteId?: string;
+
+  /**
+   * Optional bike build details captured by the configurator UI.
+   * Formatted and written to sale.order note field in Odoo so the build
+   * team can see what bike the wheels are intended for.
+   */
+  @ValidateNested()
+  @Type(() => BikeDetailsDto)
+  @IsOptional()
+  bikeDetails?: BikeDetailsDto;
 }

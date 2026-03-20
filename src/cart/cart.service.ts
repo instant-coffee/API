@@ -44,6 +44,17 @@ export class CartService {
       // Note: website_id can be set here once multi-website is configured
     };
 
+    // Optional bike build note — written to the standard sale.order note field
+    // so manufacturing / fulfilment can see what the wheels are built for.
+    if (dto.bikeDetails) {
+      const b = dto.bikeDetails;
+      const bikeLine = [b.year, b.make, b.model].filter(Boolean).join(' ');
+      const parts: string[] = [];
+      if (bikeLine) parts.push(`Bike: ${bikeLine}`);
+      if (b.notes)  parts.push(`Notes: ${b.notes}`);
+      if (parts.length) orderVals['note'] = parts.join('\n');
+    }
+
     const orderId = await this.odoo.callKw<number>(
       'sale.order',
       'create',
