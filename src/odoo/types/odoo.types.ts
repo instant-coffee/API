@@ -42,25 +42,25 @@ export interface OdooProductTag {
 export interface OdooProductTemplate {
   id: number;
   name: string;
-  list_price: number;                          // CAD base (complete wheelset)
+  list_price: number; // CAD base (complete wheelset)
   description_ecommerce: string | false;
   categ_id: [number, string];
   attribute_line_ids: number[];
   product_variant_ids: number[];
-  product_tag_ids: number[];                           // Many2many → product.tag IDs
+  product_tag_ids: number[]; // Many2many → product.tag IDs
   active: boolean;
   website_published: boolean;
   optional_product_ids: number[];
-  x_brand?: string;                            // custom field if added
+  x_brand?: string; // custom field if added
 }
 
 // ─── Raw product.product (variant) record ────────────────────────────────────
 export interface OdooProductVariant {
   id: number;
-  default_code: string | false;               // SKU
+  default_code: string | false; // SKU
   product_tmpl_id: [number, string];
   product_template_attribute_value_ids: number[];
-  lst_price: number;                           // pricelist-computed price
+  lst_price: number; // pricelist-computed price
   price_extra: number;
   active: boolean;
   combination_indices: string;
@@ -71,7 +71,7 @@ export interface OdooProductVariant {
 export interface OdooAttribute {
   id: number;
   name: string;
-  create_variant: 'always' | 'dynamic' | 'no_variant';
+  create_variant: "always" | "dynamic" | "no_variant";
 }
 
 // ─── Raw product.template.attribute.line ─────────────────────────────────────
@@ -115,13 +115,13 @@ export interface OdooPricelist {
 // ─── Raw sale.order ───────────────────────────────────────────────────────────
 export interface OdooSaleOrder {
   id: number;
-  name: string;                               // e.g. S00042
-  state: 'draft' | 'sent' | 'sale' | 'done' | 'cancel';
+  name: string;
+  state: "draft" | "sent" | "sale" | "done" | "cancel";
   amount_total: number;
   currency_id: [number, string];
-  note?: string | false;                      // terms & conditions (customer-facing, bottom of PDF)
-  x_internal_note?: string | false;             // Custom internal build notes (Other Info tab, not customer-facing)
-  order_line?: number[];                      // IDs of sale.order.line records
+  note?: string | false; // terms & conditions (customer-facing, bottom of PDF)
+  x_internal_note?: string | false; // Custom internal build notes (Other Info tab, not customer-facing)
+  order_line?: number[]; // IDs of sale.order.line records
 }
 
 // ─── Odoo session state (in-memory) ──────────────────────────────────────────

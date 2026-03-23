@@ -1,11 +1,20 @@
-import { IsInt, IsOptional, IsString, IsArray, ValidateNested, IsEmail, Min, IsNumber } from 'class-validator';
-import { Type } from 'class-transformer';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  IsArray,
+  ValidateNested,
+  IsEmail,
+  Min,
+  IsNumber,
+} from "class-validator";
+import { Type } from "class-transformer";
 
 // ─── Individual line item ─────────────────────────────────────────────────────
 
 export class CartLineDto {
   @IsInt()
-  variantId: number;      // product.product ID
+  variantId: number; // product.product ID
 
   @IsInt()
   @Min(1)
@@ -80,7 +89,7 @@ export class CreateCartDto {
   @ValidateNested()
   @Type(() => CustomerDto)
   @IsOptional()
-  customer?: CustomerDto;   // omitted for guest checkout; present for dealer orders
+  customer?: CustomerDto; // omitted for guest checkout; present for dealer orders
 
   /**
    * Site context from the frontend — determines pricelist and currency.

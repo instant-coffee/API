@@ -9,7 +9,6 @@
     "target": "ES2021",
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": true,
@@ -17,12 +16,14 @@
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
+    "strictPropertyInitialization": false,
+    "rootDir": "./src",
     "paths": {
-      "@odoo/*": ["src/odoo/*"],
-      "@products/*": ["src/products/*"],
-      "@cart/*": ["src/cart/*"],
-      "@auth/*": ["src/auth/*"],
-      "@config/*": ["src/config/*"]
+      "@odoo/*": ["./src/odoo/*"],
+      "@products/*": ["./src/products/*"],
+      "@cart/*": ["./src/cart/*"],
+      "@auth/*": ["./src/auth/*"],
+      "@config/*": ["./src/config/*"]
     }
   }
 }

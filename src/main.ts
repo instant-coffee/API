@@ -1,18 +1,18 @@
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
-import { AppModule } from './app.module';
+import { NestFactory } from "@nestjs/core";
+import { ValidationPipe, Logger } from "@nestjs/common";
+import { AppModule } from "./app.module";
 
 async function bootstrap() {
-  const app    = await NestFactory.create(AppModule);
-  const logger = new Logger('Bootstrap');
+  const app = await NestFactory.create(AppModule);
+  const logger = new Logger("Bootstrap");
 
   // ── Global validation pipe ────────────────────────────────────────────────
   // Validates all incoming request bodies against their DTO class-validator rules.
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist:        true,   // strip unknown properties
+      whitelist: true, // strip unknown properties
       forbidNonWhitelisted: false,
-      transform:        true,   // auto-transform payloads to DTO instances
+      transform: true, // auto-transform payloads to DTO instances
     }),
   );
 
@@ -20,14 +20,15 @@ async function bootstrap() {
   // Nuxt dev server runs on a different port — open CORS in development.
   // In production, restrict to your actual frontend domains.
   app.enableCors({
-    origin: process.env.NODE_ENV === 'production'
-      ? (process.env.CORS_ORIGINS ?? '').split(',').map((o) => o.trim())
-      : true,
+    origin:
+      process.env.NODE_ENV === "production"
+        ? (process.env.CORS_ORIGINS ?? "").split(",").map((o) => o.trim())
+        : true,
     credentials: true,
   });
 
   // ── Global prefix ─────────────────────────────────────────────────────────
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix("api/v1");
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
