@@ -198,61 +198,121 @@ export class OdooService implements OnModuleInit {
   /**
    * Get pricelist-adjusted prices for product variants.
    *
-   * Uses product.pricelist.get_products_price() — the canonical Odoo API.
-   * This correctly handles:
-   *   - Products priced in USD with a CAD pricelist rule (returns CAD price)
-   *   - Fixed-price pricelist rules (e.g. "CAD Retail 2026: $2,069")
-   *   - Percentage-off rules
+   * Reads product.pricelist.item records for the pricelist and matches them
+   * to our variants by template or variant ID. Returns fixed_price in the
+   * pricelist's currency (e.g. CAD $2,069) or computes percentage-off prices.
    *
-   * Odoo 19 signature: get_products_price(products, quantities, partners)
-   *   args: [[pricelistId], variantIds, [qty, qty...], [false, false...]]
-   *   returns: { product_id: price_in_pricelist_currency }
+   * NOTE on Odoo 18/19: The `price` computed field on product.product and
+   * `product.pricelist.get_products_price()` were both removed. Reading
+   * pricelist items directly is the only reliable external API approach.
    *
-   * Returns {} on any failure so callers safely fall back to lst_price.
+   * If no pricelist rule exists for a variant (e.g. USD pricelist where the
+   * product is already priced in USD), callers fall back to lst_price, which
+   * is the product's native currency price — correct for that case.
    *
    * @param pricelistId  Odoo pricelist ID
    * @param variantIds   Array of product.product IDs
-   * @param quantity     Quantity (default 1 — affects tiered pricelist rules)
+   * @param quantity     Reserved for future tiered-pricing support
    */
   async getPricelistPrices(
     pricelistId: number,
     variantIds: number[],
-    quantity = 1,
+    quantity = 1
   ): Promise<Record<number, number>> {
     if (!variantIds?.length) return {};
 
+    // Read pricelist.item records directly — the only reliable pricing API
+    // in Odoo 18/19 via JSON-RPC.
     try {
-      // Odoo 17: get_products_price(self, products, quantities, partners)
-      // self   → [pricelistId]  (first positional arg = record IDs for the recordset)
-      // products  → variantIds  (list of product.product IDs)
-      // quantities → [qty, qty, ...] one per product
-      // partners  → [false, false, ...] no partner filtering
-      const quantities = Array(variantIds.length).fill(quantity);
-      const partners = Array(variantIds.length).fill(false);
-
-      const priceMap = await this.callKw<Record<string, number>>(
-        "product.pricelist",
-        "get_products_price",
-        [[pricelistId], variantIds, quantities, partners]
+      const variantMeta = await this.searchRead<{
+        id: number;
+        product_tmpl_id: [number, string];
+        lst_price: number;
+        price_extra: number;
+      }>(
+        "product.product",
+        [["id", "in", variantIds]],
+        ["id", "product_tmpl_id", "lst_price", "price_extra"]
       );
 
-      // Odoo returns string keys — normalise to number keys
-      const result: Record<number, number> = {};
-      for (const [k, v] of Object.entries(priceMap)) {
-        if (typeof v === "number") result[Number(k)] = v;
+      const templateIds = [
+        ...new Set(variantMeta.map((v) => v.product_tmpl_id[0])),
+      ];
+
+      const items = await this.searchRead<{
+        product_id: [number, string] | false;
+        product_tmpl_id: [number, string] | false;
+        applied_on: string; // '0_product_variant' | '1_product'
+        compute_price: string; // 'fixed' | 'percentage' | 'formula'
+        fixed_price: number;
+        percent_price: number;
+      }>(
+        "product.pricelist.item",
+        [
+          ["pricelist_id", "=", pricelistId],
+          "|",
+          ["product_id", "in", variantIds],
+          ["product_tmpl_id", "in", templateIds],
+        ] as any[],
+        [
+          "product_id",
+          "product_tmpl_id",
+          "applied_on",
+          "compute_price",
+          "fixed_price",
+          "percent_price",
+        ]
+      );
+
+      const priceMap: Record<number, number> = {};
+      for (const v of variantMeta) {
+        const tmplId = v.product_tmpl_id[0];
+
+        // Most specific rule wins: variant-level > template-level
+        const rule =
+          items.find(
+            (i) =>
+              i.applied_on === "0_product_variant" &&
+              !!i.product_id &&
+              (i.product_id as [number, string])[0] === v.id
+          ) ??
+          items.find(
+            (i) =>
+              i.applied_on === "1_product" &&
+              !!i.product_tmpl_id &&
+              (i.product_tmpl_id as [number, string])[0] === tmplId
+          );
+
+        if (!rule) continue;
+
+        if (rule.compute_price === "fixed") {
+          priceMap[v.id] = rule.fixed_price;
+        } else if (rule.compute_price === "percentage") {
+          const base = v.lst_price + (v.price_extra ?? 0);
+          priceMap[v.id] = base * (1 - rule.percent_price / 100);
+        }
       }
 
-      this.logger.debug(
-        `Pricelist ${pricelistId} → ${Object.keys(result).length} prices via get_products_price`,
-      );
-
-      return result;
+      const resolvedCount = Object.keys(priceMap).length;
+      if (resolvedCount === 0) {
+        // Normal for USD pricelist — products are already in USD so no pricelist
+        // item rules are needed; callers will use lst_price (the correct USD price).
+        this.logger.debug(
+          `Pricelist ${pricelistId} → no items found (USD native pricing or rules not yet configured)`,
+        );
+      } else {
+        this.logger.debug(
+          `Pricelist ${pricelistId} → ${resolvedCount}/${variantIds.length} prices via pricelist.item`,
+        );
+      }
+      return priceMap;
     } catch (err: any) {
       this.logger.warn(
-        `getPricelistPrices (get_products_price) failed — falling back to lst_price: ${err?.message}`,
+        `pricelist.item lookup failed: ${err?.message} — callers will use lst_price`,
       );
-      return {};
     }
+
+    return {};
   }
 
   // ─── Session helpers ───────────────────────────────────────────────────────
