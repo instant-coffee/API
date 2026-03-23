@@ -39,7 +39,7 @@ export class OdooService implements OnModuleInit {
 
   constructor(
     private readonly http: HttpService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
   ) {
     this.baseUrl = this.config.getOrThrow<string>("odoo.baseUrl");
     this.db = this.config.getOrThrow<string>("odoo.db");
@@ -52,7 +52,7 @@ export class OdooService implements OnModuleInit {
     try {
       await this.authenticate();
       this.logger.log(
-        `Connected to Odoo at ${this.baseUrl} (uid: ${this.session?.uid}, cookie: ${this.session?.sessionId ? "✓" : "✗"})`
+        `Connected to Odoo at ${this.baseUrl} (uid: ${this.session?.uid}, cookie: ${this.session?.sessionId ? "✓" : "✗"})`,
       );
     } catch (err) {
       this.logger.error("Failed to authenticate with Odoo on startup", err);
@@ -85,12 +85,12 @@ export class OdooService implements OnModuleInit {
             id: this._requestId++,
             params: { db: this.db, login: this.login, password: this.password },
           },
-          { headers: { "Content-Type": "application/json" } }
-        )
+          { headers: { "Content-Type": "application/json" } },
+        ),
       );
     } catch (err: any) {
       throw new InternalServerErrorException(
-        `Odoo auth HTTP error: ${err.message}`
+        `Odoo auth HTTP error: ${err.message}`,
       );
     }
 
@@ -104,7 +104,7 @@ export class OdooService implements OnModuleInit {
     const result = body.result;
     if (!result?.uid) {
       throw new InternalServerErrorException(
-        "Odoo authentication failed — check ODOO_ADMIN_LOGIN/PASSWORD"
+        "Odoo authentication failed — check ODOO_ADMIN_LOGIN/PASSWORD",
       );
     }
 
@@ -134,7 +134,7 @@ export class OdooService implements OnModuleInit {
     }
 
     this.logger.debug(
-      `Session cookie captured: ${sessionCookie ? "✓" : "✗ (none found)"}`
+      `Session cookie captured: ${sessionCookie ? "✓" : "✗ (none found)"}`,
     );
 
     this.session = {
@@ -158,7 +158,7 @@ export class OdooService implements OnModuleInit {
     model: string,
     domain: any[][],
     fields: string[],
-    opts: { limit?: number; offset?: number; order?: string } = {}
+    opts: { limit?: number; offset?: number; order?: string } = {},
   ): Promise<T[]> {
     return this.callKw<T[]>(model, "search_read", [domain], {
       fields,
@@ -180,7 +180,7 @@ export class OdooService implements OnModuleInit {
     model: string,
     method: string,
     args: any[],
-    kwargs: Record<string, any> = {}
+    kwargs: Record<string, any> = {},
   ): Promise<T> {
     await this._ensureSession();
 
@@ -217,7 +217,7 @@ export class OdooService implements OnModuleInit {
   async getPricelistPrices(
     pricelistId: number,
     variantIds: number[],
-    quantity = 1
+    quantity = 1,
   ): Promise<Record<number, number>> {
     if (!variantIds?.length) return {};
 
@@ -232,7 +232,7 @@ export class OdooService implements OnModuleInit {
       }>(
         "product.product",
         [["id", "in", variantIds]],
-        ["id", "product_tmpl_id", "lst_price", "price_extra"]
+        ["id", "product_tmpl_id", "lst_price", "price_extra"],
       );
 
       const templateIds = [
@@ -261,7 +261,7 @@ export class OdooService implements OnModuleInit {
           "compute_price",
           "fixed_price",
           "percent_price",
-        ]
+        ],
       );
 
       const priceMap: Record<number, number> = {};
@@ -274,13 +274,13 @@ export class OdooService implements OnModuleInit {
             (i) =>
               i.applied_on === "0_product_variant" &&
               !!i.product_id &&
-              (i.product_id as [number, string])[0] === v.id
+              (i.product_id as [number, string])[0] === v.id,
           ) ??
           items.find(
             (i) =>
               i.applied_on === "1_product" &&
               !!i.product_tmpl_id &&
-              (i.product_tmpl_id as [number, string])[0] === tmplId
+              (i.product_tmpl_id as [number, string])[0] === tmplId,
           );
 
         if (!rule) continue;
@@ -328,7 +328,7 @@ export class OdooService implements OnModuleInit {
 
   private async _rpc<T>(
     endpoint: string,
-    params: Record<string, any>
+    params: Record<string, any>,
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const id = this._requestId++;
@@ -339,7 +339,7 @@ export class OdooService implements OnModuleInit {
     const method = params.method ?? "—";
     const argsPreview = JSON.stringify(params.args ?? []).slice(0, 200);
     this.logger.debug(
-      `→ Odoo RPC #${id} ${model}.${method}() args=${argsPreview}`
+      `→ Odoo RPC #${id} ${model}.${method}() args=${argsPreview}`,
     );
 
     const headers: Record<string, string> = {
@@ -359,14 +359,14 @@ export class OdooService implements OnModuleInit {
         this.http.post<OdooJsonRpcResponse<T>>(
           url,
           { jsonrpc: "2.0", method: "call", id, params },
-          { headers }
-        )
+          { headers },
+        ),
       );
       body = response.data;
     } catch (err: any) {
       this.logger.error(`HTTP error calling Odoo ${endpoint}: ${err.message}`);
       throw new InternalServerErrorException(
-        `Odoo request failed: ${err.message}`
+        `Odoo request failed: ${err.message}`,
       );
     }
 

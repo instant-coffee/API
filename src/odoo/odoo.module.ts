@@ -1,6 +1,6 @@
-import { Module } from '@nestjs/common';
-import { HttpModule } from '@nestjs/axios';
-import { OdooService } from './odoo.service';
+import { Module } from "@nestjs/common";
+import { HttpModule } from "@nestjs/axios";
+import { OdooService } from "./odoo.service";
 
 @Module({
   imports: [
@@ -10,6 +10,6 @@ import { OdooService } from './odoo.service';
     }),
   ],
   providers: [OdooService],
-  exports:   [OdooService],   // ← every feature module imports OdooModule to get this
+  exports: [OdooService], // ← every feature module imports OdooModule to get this
 })
 export class OdooModule {}

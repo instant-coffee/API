@@ -170,7 +170,7 @@ export class ProductsService {
 
     this.logger.log(
       `Pricelist prices for site=${site.siteId} pricelist=${site.pricelistId}: ` +
-      `${JSON.stringify(pricelistPrices)} (fallback=lst_price in product currency)`,
+        `${JSON.stringify(pricelistPrices)} (fallback=lst_price in product currency)`,
     );
 
     // ── 6. Shape variants ─────────────────────────────────────────────────────
@@ -423,7 +423,7 @@ export class ProductsService {
 
     this.logger.log(
       `Family pricelist prices site=${site.siteId} pricelist=${site.pricelistId}: ` +
-      `${JSON.stringify(pricelistPrices)}`,
+        `${JSON.stringify(pricelistPrices)}`,
     );
 
     // ── 6. Shape unified variant list ─────────────────────────────────────────

@@ -9,7 +9,6 @@
     "target": "ES2021",
     "sourceMap": true,
     "outDir": "./dist",
-    "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": true,
     "noImplicitAny": false,
@@ -18,6 +17,8 @@
     "noFallthroughCasesInSwitch": false,
     "strictPropertyInitialization": false,
     "rootDir": "./src",
+    "incremental": false,
+    "noEmit": false,
     "paths": {
       "@odoo/*": ["./src/odoo/*"],
       "@products/*": ["./src/products/*"],

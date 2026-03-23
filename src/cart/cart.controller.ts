@@ -1,10 +1,18 @@
-import { Controller, Post, Body, Headers, UseGuards, Request, Logger } from '@nestjs/common';
-import { CartService } from './cart.service';
-import { CreateCartDto } from './dto/create-cart.dto';
-import { resolveSiteContext } from '../config/site-context';
-import { OptionalJwtGuard } from '../auth/guards/optional-jwt.guard';
+import {
+  Controller,
+  Post,
+  Body,
+  Headers,
+  UseGuards,
+  Request,
+  Logger,
+} from "@nestjs/common";
+import { CartService } from "./cart.service";
+import { CreateCartDto } from "./dto/create-cart.dto";
+import { resolveSiteContext } from "../config/site-context";
+import { OptionalJwtGuard } from "../auth/guards/optional-jwt.guard";
 
-@Controller('cart')
+@Controller("cart")
 export class CartController {
   private readonly logger = new Logger(CartController.name);
 
@@ -27,24 +35,24 @@ export class CartController {
   @UseGuards(OptionalJwtGuard)
   createOrder(
     @Body() dto: CreateCartDto,
-    @Headers('x-site-context') siteHeader?: string,
+    @Headers("x-site-context") siteHeader?: string,
     @Request() req?: any,
   ) {
     const site = resolveSiteContext(siteHeader ?? dto.siteId);
-    const dealerPartnerId   = req?.user?.odooPartnerId ?? undefined;
-    const dealerPricelistId = req?.user?.pricelistId   ?? undefined;
+    const dealerPartnerId = req?.user?.odooPartnerId ?? undefined;
+    const dealerPricelistId = req?.user?.pricelistId ?? undefined;
 
     this.logger.log(
       `POST /cart — site: ${site.siteId} | ` +
-      `lines: ${dto.lines.length} | ` +
-      `dealer: ${dealerPartnerId ?? 'guest'} | ` +
-      `bikeDetails: ${dto.bikeDetails ? JSON.stringify(dto.bikeDetails) : 'none'}`,
+        `lines: ${dto.lines.length} | ` +
+        `dealer: ${dealerPartnerId ?? "guest"} | ` +
+        `bikeDetails: ${dto.bikeDetails ? JSON.stringify(dto.bikeDetails) : "none"}`,
     );
 
     dto.lines.forEach((line, i) => {
       this.logger.log(
         `  Line ${i + 1}: variantId=${line.variantId} qty=${line.quantity} ` +
-        `noVariantIds=[${line.noVariantValueIds?.join(', ') ?? 'none'}]`,
+          `noVariantIds=[${line.noVariantValueIds?.join(", ") ?? "none"}]`,
       );
     });
 

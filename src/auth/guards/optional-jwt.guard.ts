@@ -1,5 +1,5 @@
-import { Injectable, ExecutionContext } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
+import { Injectable, ExecutionContext } from "@nestjs/common";
+import { AuthGuard } from "@nestjs/passport";
 
 /**
  * Optional JWT guard — attaches req.user if a valid token is present,
@@ -8,7 +8,7 @@ import { AuthGuard } from '@nestjs/passport';
  * Used on the cart endpoint so guest and dealer checkouts share one route.
  */
 @Injectable()
-export class OptionalJwtGuard extends AuthGuard('jwt') {
+export class OptionalJwtGuard extends AuthGuard("jwt") {
   handleRequest(err: any, user: any) {
     // Return user if authenticated, null if not — never throw
     return user ?? null;

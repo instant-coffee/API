@@ -33,70 +33,70 @@
 //  Note: No "Western Bike USA" website record exists yet.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type SiteId = 'nobl_ca' | 'nobl_us' | 'wb_ca' | 'wb_us';
+export type SiteId = "nobl_ca" | "nobl_us" | "wb_ca" | "wb_us";
 
 export interface SiteContext {
-  siteId:         SiteId;
-  brand:          'nobl' | 'westernbike';
-  currency:       'CAD' | 'USD';
-  currencyId:     number;  // Odoo res.currency ID
-  locale:         string;
-  companyId:      number;  // Odoo res.company ID
-  pricelistId:    number;  // Odoo product.pricelist ID — retail (unauthenticated)
-  odooWebsiteId:  number;  // Odoo website ID
-  domain:         string;  // canonical public domain
+  siteId: SiteId;
+  brand: "nobl" | "westernbike";
+  currency: "CAD" | "USD";
+  currencyId: number; // Odoo res.currency ID
+  locale: string;
+  companyId: number; // Odoo res.company ID
+  pricelistId: number; // Odoo product.pricelist ID — retail (unauthenticated)
+  odooWebsiteId: number; // Odoo website ID
+  domain: string; // canonical public domain
 }
 
 // ─── Site registry ─────────────────────────────────────────────────────────────
 
 export const SITE_CONTEXTS: Record<SiteId, SiteContext> = {
   nobl_ca: {
-    siteId:          'nobl_ca',
-    brand:           'nobl',
-    currency:        'CAD',
-    currencyId:      3,
-    locale:          'en-CA',
-    companyId:       2,   // WBC Ltd.
-    pricelistId:     85,  // CAD Retail 2026
-    odooWebsiteId:   2,   // NOBL Wheels Canada
-    domain:          'shop.noblwheels.ca',
+    siteId: "nobl_ca",
+    brand: "nobl",
+    currency: "CAD",
+    currencyId: 3,
+    locale: "en-CA",
+    companyId: 2, // WBC Ltd.
+    pricelistId: 85, // CAD Retail 2026
+    odooWebsiteId: 2, // NOBL Wheels Canada
+    domain: "shop.noblwheels.ca",
   },
   nobl_us: {
-    siteId:          'nobl_us',
-    brand:           'nobl',
-    currency:        'USD',
-    currencyId:      1,
-    locale:          'en-US',
-    companyId:       1,   // WBC USA Inc.
-    pricelistId:     58,  // USD (retail)
-    odooWebsiteId:   1,   // NOBL Wheels
-    domain:          'shop.noblwheels.com',
+    siteId: "nobl_us",
+    brand: "nobl",
+    currency: "USD",
+    currencyId: 1,
+    locale: "en-US",
+    companyId: 1, // WBC USA Inc.
+    pricelistId: 58, // USD (retail)
+    odooWebsiteId: 1, // NOBL Wheels
+    domain: "shop.noblwheels.com",
   },
   wb_ca: {
-    siteId:          'wb_ca',
-    brand:           'westernbike',
-    currency:        'CAD',
-    currencyId:      3,
-    locale:          'en-CA',
-    companyId:       2,   // WBC Ltd.
-    pricelistId:     85,  // CAD Retail 2026 (shared with nobl_ca)
-    odooWebsiteId:   3,   // Western Bike Co.
-    domain:          'shop.westernbike.ca',
+    siteId: "wb_ca",
+    brand: "westernbike",
+    currency: "CAD",
+    currencyId: 3,
+    locale: "en-CA",
+    companyId: 2, // WBC Ltd.
+    pricelistId: 85, // CAD Retail 2026 (shared with nobl_ca)
+    odooWebsiteId: 3, // Western Bike Co.
+    domain: "shop.westernbike.ca",
   },
   wb_us: {
-    siteId:          'wb_us',
-    brand:           'westernbike',
-    currency:        'USD',
-    currencyId:      1,
-    locale:          'en-US',
-    companyId:       1,   // WBC USA Inc.
-    pricelistId:     58,  // USD (retail) — shared with nobl_us
-    odooWebsiteId:   0,   // ⚠️ No "Western Bike USA" website record yet — needs creating
-    domain:          'shop.westernbike.com',
+    siteId: "wb_us",
+    brand: "westernbike",
+    currency: "USD",
+    currencyId: 1,
+    locale: "en-US",
+    companyId: 1, // WBC USA Inc.
+    pricelistId: 58, // USD (retail) — shared with nobl_us
+    odooWebsiteId: 0, // ⚠️ No "Western Bike USA" website record yet — needs creating
+    domain: "shop.westernbike.com",
   },
 };
 
-export const DEFAULT_SITE: SiteId = 'nobl_ca';
+export const DEFAULT_SITE: SiteId = "nobl_ca";
 
 /**
  * Resolve a SiteContext from the value of the x-site-context header.

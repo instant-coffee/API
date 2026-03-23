@@ -1,7 +1,7 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { OdooService } from '../odoo/odoo.service';
-import { LoginDto } from './dto/login.dto';
+import { Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { OdooService } from "../odoo/odoo.service";
+import { LoginDto } from "./dto/login.dto";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AuthService — dealer B2B authentication
@@ -21,12 +21,12 @@ import { LoginDto } from './dto/login.dto';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface DealerJwtPayload {
-  sub:             number;    // res.partner ID
-  email:           string;
-  odooPartnerId:   number;
-  pricelistId:     number;
-  iat?:            number;
-  exp?:            number;
+  sub: number; // res.partner ID
+  email: string;
+  odooPartnerId: number;
+  pricelistId: number;
+  iat?: number;
+  exp?: number;
 }
 
 @Injectable()
@@ -38,7 +38,9 @@ export class AuthService {
     private readonly jwt: JwtService,
   ) {}
 
-  async login(dto: LoginDto): Promise<{ accessToken: string; dealer: Partial<DealerJwtPayload> }> {
+  async login(
+    dto: LoginDto,
+  ): Promise<{ accessToken: string; dealer: Partial<DealerJwtPayload> }> {
     // ── Authenticate dealer against Odoo ──────────────────────────────────────
     // This uses Odoo's own /web/session/authenticate endpoint with the dealer's
     // credentials. The admin OdooService session is NOT used here — we make a
@@ -47,35 +49,41 @@ export class AuthService {
 
     try {
       const authResult = await this.odoo.callKw<any>(
-        'res.users',
-        'authenticate',
+        "res.users",
+        "authenticate",
         [dto.email, dto.password, {}],
       );
       odooUid = authResult;
     } catch {
-      throw new UnauthorizedException('Invalid dealer credentials');
+      throw new UnauthorizedException("Invalid dealer credentials");
     }
 
     if (!odooUid) {
-      throw new UnauthorizedException('Invalid dealer credentials');
+      throw new UnauthorizedException("Invalid dealer credentials");
     }
 
     // ── Fetch the res.partner linked to this user ─────────────────────────────
-    const [user] = await this.odoo.searchRead<{ id: number; partner_id: [number, string]; property_product_pricelist: [number, string] }>(
-      'res.users',
-      [['id', '=', odooUid]],
-      ['id', 'partner_id', 'property_product_pricelist'],
+    const [user] = await this.odoo.searchRead<{
+      id: number;
+      partner_id: [number, string];
+      property_product_pricelist: [number, string];
+    }>(
+      "res.users",
+      [["id", "=", odooUid]],
+      ["id", "partner_id", "property_product_pricelist"],
     );
 
-    const partnerId   = user.partner_id[0];
+    const partnerId = user.partner_id[0];
     const pricelistId = user.property_product_pricelist?.[0] ?? 1;
 
-    this.logger.log(`Dealer login: partner_id=${partnerId}, pricelist_id=${pricelistId}`);
+    this.logger.log(
+      `Dealer login: partner_id=${partnerId}, pricelist_id=${pricelistId}`,
+    );
 
     // ── Issue JWT ─────────────────────────────────────────────────────────────
     const payload: DealerJwtPayload = {
-      sub:           partnerId,
-      email:         dto.email,
+      sub: partnerId,
+      email: dto.email,
       odooPartnerId: partnerId,
       pricelistId,
     };

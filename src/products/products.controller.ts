@@ -1,8 +1,8 @@
-import { Controller, Get, Param, ParseIntPipe, Headers } from '@nestjs/common';
-import { ProductsService } from './products.service';
-import { resolveSiteContext } from '../config/site-context';
+import { Controller, Get, Param, ParseIntPipe, Headers } from "@nestjs/common";
+import { ProductsService } from "./products.service";
+import { resolveSiteContext } from "../config/site-context";
 
-@Controller('products')
+@Controller("products")
 export class ProductsController {
   constructor(private readonly products: ProductsService) {}
 
@@ -14,9 +14,7 @@ export class ProductsController {
    *   x-site-context: nobl_ca | nobl_us | wb_ca | wb_us
    */
   @Get()
-  listProducts(
-    @Headers('x-site-context') siteHeader?: string,
-  ) {
+  listProducts(@Headers("x-site-context") siteHeader?: string) {
     const site = resolveSiteContext(siteHeader);
     return this.products.listProducts(site);
   }
@@ -39,10 +37,10 @@ export class ProductsController {
    *   GET /products/family/family:sr38-hope-pro5
    *   x-site-context: nobl_us
    */
-  @Get('family/:tag')
+  @Get("family/:tag")
   getFamily(
-    @Param('tag') tag: string,
-    @Headers('x-site-context') siteHeader?: string,
+    @Param("tag") tag: string,
+    @Headers("x-site-context") siteHeader?: string,
   ) {
     const site = resolveSiteContext(siteHeader);
     return this.products.getProductFamily(tag, site);
@@ -59,10 +57,10 @@ export class ProductsController {
    *   GET /products/42
    *   x-site-context: nobl_ca
    */
-  @Get(':id')
+  @Get(":id")
   getProduct(
-    @Param('id', ParseIntPipe) id: number,
-    @Headers('x-site-context') siteHeader?: string,
+    @Param("id", ParseIntPipe) id: number,
+    @Headers("x-site-context") siteHeader?: string,
   ) {
     const site = resolveSiteContext(siteHeader);
     return this.products.getProduct(id, site);
