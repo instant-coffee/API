@@ -1,12 +1,17 @@
-import { Injectable, Logger, OnModuleInit, InternalServerErrorException } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
-import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  InternalServerErrorException,
+} from "@nestjs/common";
+import { HttpService } from "@nestjs/axios";
+import { ConfigService } from "@nestjs/config";
+import { firstValueFrom } from "rxjs";
 import {
   OdooJsonRpcResponse,
   OdooAuthResult,
   OdooSession,
-} from './types/odoo.types';
+} from "./types/odoo.types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OdooService — core JSON-RPC client
@@ -34,21 +39,23 @@ export class OdooService implements OnModuleInit {
 
   constructor(
     private readonly http: HttpService,
-    private readonly config: ConfigService,
+    private readonly config: ConfigService
   ) {
-    this.baseUrl  = this.config.getOrThrow<string>('odoo.baseUrl');
-    this.db       = this.config.getOrThrow<string>('odoo.db');
-    this.login    = this.config.getOrThrow<string>('odoo.login');
-    this.password = this.config.getOrThrow<string>('odoo.password');
+    this.baseUrl = this.config.getOrThrow<string>("odoo.baseUrl");
+    this.db = this.config.getOrThrow<string>("odoo.db");
+    this.login = this.config.getOrThrow<string>("odoo.login");
+    this.password = this.config.getOrThrow<string>("odoo.password");
   }
 
   async onModuleInit() {
     // Eagerly authenticate so the first real request is fast.
     try {
       await this.authenticate();
-      this.logger.log(`Connected to Odoo at ${this.baseUrl} (uid: ${this.session?.uid}, cookie: ${this.session?.sessionId ? '✓' : '✗'})`);
+      this.logger.log(
+        `Connected to Odoo at ${this.baseUrl} (uid: ${this.session?.uid}, cookie: ${this.session?.sessionId ? "✓" : "✗"})`
+      );
     } catch (err) {
-      this.logger.error('Failed to authenticate with Odoo on startup', err);
+      this.logger.error("Failed to authenticate with Odoo on startup", err);
       // Non-fatal at startup — will retry on first request.
     }
   }
@@ -73,16 +80,18 @@ export class OdooService implements OnModuleInit {
         this.http.post(
           url,
           {
-            jsonrpc: '2.0',
-            method:  'call',
-            id:      this._requestId++,
-            params:  { db: this.db, login: this.login, password: this.password },
+            jsonrpc: "2.0",
+            method: "call",
+            id: this._requestId++,
+            params: { db: this.db, login: this.login, password: this.password },
           },
-          { headers: { 'Content-Type': 'application/json' } },
-        ),
+          { headers: { "Content-Type": "application/json" } }
+        )
       );
     } catch (err: any) {
-      throw new InternalServerErrorException(`Odoo auth HTTP error: ${err.message}`);
+      throw new InternalServerErrorException(
+        `Odoo auth HTTP error: ${err.message}`
+      );
     }
 
     const body: OdooJsonRpcResponse<OdooAuthResult> = httpResponse.data;
@@ -94,21 +103,28 @@ export class OdooService implements OnModuleInit {
 
     const result = body.result;
     if (!result?.uid) {
-      throw new InternalServerErrorException('Odoo authentication failed — check ODOO_ADMIN_LOGIN/PASSWORD');
+      throw new InternalServerErrorException(
+        "Odoo authentication failed — check ODOO_ADMIN_LOGIN/PASSWORD"
+      );
     }
 
     // ── Extract session cookie from Set-Cookie header ─────────────────────
     // Odoo sets:  session_id=<value>; Path=/; HttpOnly; SameSite=Lax
     // We store the raw "session_id=<value>" string and replay it as a
     // Cookie header on every subsequent request.
-    let sessionCookie = '';
-    const setCookieHeader = httpResponse.headers['set-cookie'] as string[] | string | undefined;
+    let sessionCookie = "";
+    const setCookieHeader = httpResponse.headers["set-cookie"] as
+      | string[]
+      | string
+      | undefined;
 
     if (setCookieHeader) {
-      const cookies = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
-      const found   = cookies.find((c) => c.startsWith('session_id='));
+      const cookies = Array.isArray(setCookieHeader)
+        ? setCookieHeader
+        : [setCookieHeader];
+      const found = cookies.find((c) => c.startsWith("session_id="));
       if (found) {
-        sessionCookie = found.split(';')[0]; // "session_id=xxxx"
+        sessionCookie = found.split(";")[0]; // "session_id=xxxx"
       }
     }
 
@@ -117,11 +133,13 @@ export class OdooService implements OnModuleInit {
       sessionCookie = `session_id=${result.session_id}`;
     }
 
-    this.logger.debug(`Session cookie captured: ${sessionCookie ? '✓' : '✗ (none found)'}`);
+    this.logger.debug(
+      `Session cookie captured: ${sessionCookie ? "✓" : "✗ (none found)"}`
+    );
 
     this.session = {
-      uid:       result.uid,
-      sessionId: sessionCookie,   // full "session_id=xxx" string, ready to use as Cookie header
+      uid: result.uid,
+      sessionId: sessionCookie, // full "session_id=xxx" string, ready to use as Cookie header
       expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8 h
     };
 
@@ -140,13 +158,13 @@ export class OdooService implements OnModuleInit {
     model: string,
     domain: any[][],
     fields: string[],
-    opts: { limit?: number; offset?: number; order?: string } = {},
+    opts: { limit?: number; offset?: number; order?: string } = {}
   ): Promise<T[]> {
-    return this.callKw<T[]>(model, 'search_read', [domain], {
+    return this.callKw<T[]>(model, "search_read", [domain], {
       fields,
-      limit:  opts.limit  ?? 100,
+      limit: opts.limit ?? 100,
       offset: opts.offset ?? 0,
-      order:  opts.order,
+      order: opts.order,
     });
   }
 
@@ -162,30 +180,35 @@ export class OdooService implements OnModuleInit {
     model: string,
     method: string,
     args: any[],
-    kwargs: Record<string, any> = {},
+    kwargs: Record<string, any> = {}
   ): Promise<T> {
     await this._ensureSession();
 
-    return this._rpc<T>('/web/dataset/call_kw', {
+    return this._rpc<T>("/web/dataset/call_kw", {
       model,
       method,
       args,
       kwargs: {
-        context: { lang: 'en_US', tz: 'America/Vancouver' },
+        context: { lang: "en_US", tz: "America/Vancouver" },
         ...kwargs,
       },
     });
   }
 
   /**
-   * Get pricelist-adjusted prices for product variants — Odoo 19 compatible.
+   * Get pricelist-adjusted prices for product variants.
    *
-   * `product.pricelist.get_products_price()` no longer exists as a public RPC
-   * method. The correct approach is to pass `pricelist` in the RPC context
-   * when reading `product.product`, which causes Odoo to evaluate the
-   * `price` compute field against that pricelist server-side.
+   * Uses product.pricelist.get_products_price() — the canonical Odoo API.
+   * This correctly handles:
+   *   - Products priced in USD with a CAD pricelist rule (returns CAD price)
+   *   - Fixed-price pricelist rules (e.g. "CAD Retail 2026: $2,069")
+   *   - Percentage-off rules
    *
-   * Returns {} on any failure so callers can safely fall back to lst_price.
+   * Odoo 19 signature: get_products_price(products, quantities, partners)
+   *   args: [[pricelistId], variantIds, [qty, qty...], [false, false...]]
+   *   returns: { product_id: price_in_pricelist_currency }
+   *
+   * Returns {} on any failure so callers safely fall back to lst_price.
    *
    * @param pricelistId  Odoo pricelist ID
    * @param variantIds   Array of product.product IDs
@@ -199,70 +222,74 @@ export class OdooService implements OnModuleInit {
     if (!variantIds?.length) return {};
 
     try {
-      // Pass pricelist + quantity in context. Odoo's `price` compute field on
-      // product.product reads these to apply pricelist rules server-side.
-      const results = await this.callKw<{ id: number; price: number }[]>(
-        'product.product',
-        'search_read',
-        [[['id', 'in', variantIds]]],
-        {
-          fields:  ['id', 'price'],
-          context: {
-            pricelist: pricelistId,
-            quantity,
-            lang: 'en_US',
-            tz:   'America/Vancouver',
-          },
-        },
+      // Odoo 17: get_products_price(self, products, quantities, partners)
+      // self   → [pricelistId]  (first positional arg = record IDs for the recordset)
+      // products  → variantIds  (list of product.product IDs)
+      // quantities → [qty, qty, ...] one per product
+      // partners  → [false, false, ...] no partner filtering
+      const quantities = Array(variantIds.length).fill(quantity);
+      const partners = Array(variantIds.length).fill(false);
+
+      const priceMap = await this.callKw<Record<string, number>>(
+        "product.pricelist",
+        "get_products_price",
+        [[pricelistId], variantIds, quantities, partners]
       );
 
-      const priceMap: Record<number, number> = {};
-      for (const r of results) {
-        if (typeof r.price === 'number') priceMap[r.id] = r.price;
+      // Odoo returns string keys — normalise to number keys
+      const result: Record<number, number> = {};
+      for (const [k, v] of Object.entries(priceMap)) {
+        if (typeof v === "number") result[Number(k)] = v;
       }
 
       this.logger.debug(
-        `Pricelist ${pricelistId} prices resolved for ${Object.keys(priceMap).length} variants via context`,
+        `Pricelist ${pricelistId} → ${Object.keys(result).length} prices via get_products_price`,
       );
 
-      return priceMap;
+      return result;
     } catch (err: any) {
-      this.logger.warn(`getPricelistPrices failed, falling back to lst_price: ${err?.message}`);
+      this.logger.warn(
+        `getPricelistPrices (get_products_price) failed — falling back to lst_price: ${err?.message}`,
+      );
       return {};
     }
   }
-
 
   // ─── Session helpers ───────────────────────────────────────────────────────
 
   private async _ensureSession(): Promise<void> {
     if (!this.session || new Date() >= this.session.expiresAt) {
-      this.logger.log('Session expired or missing — re-authenticating');
+      this.logger.log("Session expired or missing — re-authenticating");
       await this.authenticate();
     }
   }
 
   // ─── Low-level JSON-RPC ────────────────────────────────────────────────────
 
-  private async _rpc<T>(endpoint: string, params: Record<string, any>): Promise<T> {
+  private async _rpc<T>(
+    endpoint: string,
+    params: Record<string, any>
+  ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    const id  = this._requestId++;
+    const id = this._requestId++;
 
     // DEBUG — log every outbound Odoo RPC call (model + method + args summary).
     // Only visible when LOG_LEVEL=debug. Safe to leave on in development.
-    const model  = params.model  ?? '—';
-    const method = params.method ?? '—';
+    const model = params.model ?? "—";
+    const method = params.method ?? "—";
     const argsPreview = JSON.stringify(params.args ?? []).slice(0, 200);
-    this.logger.debug(`→ Odoo RPC #${id} ${model}.${method}() args=${argsPreview}`);
+    this.logger.debug(
+      `→ Odoo RPC #${id} ${model}.${method}() args=${argsPreview}`
+    );
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     };
 
     // Pass session cookie for authenticated calls.
     // sessionId already contains the full "session_id=xxx" string.
     if (this.session?.sessionId) {
-      headers['Cookie'] = this.session.sessionId;
+      headers["Cookie"] = this.session.sessionId;
     }
 
     let body: OdooJsonRpcResponse<T>;
@@ -271,14 +298,16 @@ export class OdooService implements OnModuleInit {
       const response = await firstValueFrom(
         this.http.post<OdooJsonRpcResponse<T>>(
           url,
-          { jsonrpc: '2.0', method: 'call', id, params },
-          { headers },
-        ),
+          { jsonrpc: "2.0", method: "call", id, params },
+          { headers }
+        )
       );
       body = response.data;
     } catch (err: any) {
       this.logger.error(`HTTP error calling Odoo ${endpoint}: ${err.message}`);
-      throw new InternalServerErrorException(`Odoo request failed: ${err.message}`);
+      throw new InternalServerErrorException(
+        `Odoo request failed: ${err.message}`
+      );
     }
 
     this.logger.debug(`← Odoo RPC #${id} ${model}.${method}() OK`);
@@ -288,7 +317,7 @@ export class OdooService implements OnModuleInit {
       this.logger.error(`Odoo JSON-RPC error on ${endpoint}: ${msg}`);
 
       // Session expired — clear and let caller retry
-      if (body.error.code === 100 || msg?.includes('session')) {
+      if (body.error.code === 100 || msg?.includes("session")) {
         this.session = null;
       }
 
