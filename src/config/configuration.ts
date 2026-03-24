@@ -11,8 +11,8 @@ export default () => ({
   odoo: {
     baseUrl: process.env.ODOO_BASE_URL,
     db: process.env.ODOO_DB,
-    login: process.env.ODOO_ADMIN_LOGIN,
-    password: process.env.ODOO_ADMIN_PASSWORD,
+    // Supports "bearer <key>" or plain "<key>" — normalised in OdooService.
+    apiKey: process.env.ODOO_ADMIN_PASSWORD ?? process.env.ODOO_API_KEY,
   },
 
   jwt: {

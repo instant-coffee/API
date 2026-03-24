@@ -1,35 +1,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Raw Odoo JSON-RPC response shapes
-// These represent what Odoo actually returns — before we transform anything.
+// Odoo JSON API v2 error shape
+// Returned in the body when Odoo signals a logical error on an HTTP 4xx/5xx.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface OdooJsonRpcResponse<T = any> {
-  jsonrpc: string;
-  id: number | null;
-  result?: T;
-  error?: OdooJsonRpcError;
-}
-
-export interface OdooJsonRpcError {
-  code: number;
+export interface OdooJsonV2Error {
   message: string;
-  data: {
+  data?: {
     name: string;
     debug: string;
     message: string;
     arguments: string[];
     context: Record<string, any>;
   };
-}
-
-export interface OdooAuthResult {
-  uid: number;
-  session_id: string;
-  db: string;
-  name: string;
-  username: string;
-  partner_id: number;
-  company_id: number;
 }
 
 // ─── Raw product.tag record ───────────────────────────────────────────────────
@@ -124,9 +106,3 @@ export interface OdooSaleOrder {
   order_line?: number[]; // IDs of sale.order.line records
 }
 
-// ─── Odoo session state (in-memory) ──────────────────────────────────────────
-export interface OdooSession {
-  uid: number;
-  sessionId: string;
-  expiresAt: Date;
-}
