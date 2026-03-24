@@ -53,4 +53,10 @@ export interface ProductResponseDto {
   variants: VariantDto[];
   options: WheelOptionDto[];
   addOns: AddOnDto[];
+  // ── Optional metadata parsed from product tags ──────────────────────────
+  // Populated when the product template has tags following these conventions:
+  //   discipline:e-mtb|gravity  →  "E-MTB | GRAVITY"
+  //   weight:1971               →  1971 (grams, 29" wheelset)
+  discipline?: string;   // raw value from tag, e.g. "e-mtb|gravity"
+  weightGrams?: number;  // grams as integer
 }

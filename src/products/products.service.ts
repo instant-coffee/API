@@ -66,6 +66,7 @@ export class ProductsService {
         "attribute_line_ids",
         "product_variant_ids",
         "optional_product_ids",
+        "product_tag_ids",
         "active",
       ],
     );
@@ -73,6 +74,9 @@ export class ProductsService {
     if (!template) {
       throw new NotFoundException(`Product template ${templateId} not found`);
     }
+
+    // ── 1b. Resolve meta tags (discipline, weight) ────────────────────────────
+    const metaTags = await this._resolveMetaTags(template.product_tag_ids ?? []);
 
     // ── 2. Fetch attribute lines ──────────────────────────────────────────────
     // Note: create_variant lives on product.attribute, not on the line itself
@@ -301,6 +305,7 @@ export class ProductsService {
       variants: shapedVariants,
       options: shapedOptions,
       addOns: shapedAddOns,
+      ...metaTags,
     };
   }
 
@@ -335,6 +340,7 @@ export class ProductsService {
         "attribute_line_ids",
         "product_variant_ids",
         "optional_product_ids",
+        "product_tag_ids",
       ],
     );
 
@@ -607,15 +613,20 @@ export class ProductsService {
 
     // ── 9. Derive family display name ─────────────────────────────────────────
     // Use the Wheelset template name, stripping the role suffix.
-    const baseName = (wheelsetTemplate ?? templates[0]).name
+    const primaryTemplate = wheelsetTemplate ?? templates[0];
+    const baseName = primaryTemplate.name
       .replace(/\s+(wheelset|front wheel|rear wheel)$/i, "")
       .trim();
 
-    const description =
-      (wheelsetTemplate ?? templates[0]).description_ecommerce || "";
+    const description = primaryTemplate.description_ecommerce || "";
+
+    // Resolve meta tags from the primary (wheelset) template's tags
+    const metaTags = await this._resolveMetaTags(
+      primaryTemplate.product_tag_ids ?? [],
+    );
 
     return {
-      id: wheelsetTemplate?.id ?? templates[0].id,
+      id: primaryTemplate.id,
       name: baseName,
       brand: "nobl",
       description,
@@ -623,6 +634,7 @@ export class ProductsService {
       variants: shapedVariants,
       options: shapedOptions,
       addOns: shapedAddOns,
+      ...metaTags,
     };
   }
 
@@ -674,6 +686,49 @@ export class ProductsService {
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
+
+  /**
+   * Fetch tag names for a set of tag IDs and parse out discipline/weight meta.
+   *
+   * Tag naming conventions:
+   *   discipline:e-mtb|gravity   → discipline = "e-mtb|gravity"
+   *   weight:1971                → weightGrams = 1971
+   *   family:sr38-hope-pro5      → used elsewhere (ignored here)
+   */
+  private async _resolveMetaTags(
+    tagIds: number[],
+  ): Promise<{ discipline?: string; weightGrams?: number }> {
+    if (!tagIds.length) return {};
+
+    const tags = await this.odoo.searchRead<OdooProductTag>(
+      "product.tag",
+      [["id", "in", tagIds]],
+      ["id", "name"],
+    );
+
+    return this._parseMetaTags(tags.map((t) => t.name));
+  }
+
+  /**
+   * Parse raw tag name strings into structured metadata.
+   * Pure function — no I/O.
+   */
+  private _parseMetaTags(
+    tagNames: string[],
+  ): { discipline?: string; weightGrams?: number } {
+    const result: { discipline?: string; weightGrams?: number } = {};
+
+    for (const tag of tagNames) {
+      if (tag.startsWith("discipline:")) {
+        result.discipline = tag.slice("discipline:".length).trim();
+      } else if (tag.startsWith("weight:")) {
+        const n = parseInt(tag.slice("weight:".length).trim(), 10);
+        if (!isNaN(n)) result.weightGrams = n;
+      }
+    }
+
+    return result;
+  }
 
   // ─── Map Odoo attribute name → stable camelCase type key ──────────────────
   // Used in both getProduct and getProductFamily so the frontend always receives
